@@ -1,0 +1,2 @@
+# PySO
+Particle swarm optimizer
