@@ -105,6 +105,7 @@ class MWE_Swarm(object):
 
         self.Omega = Omega
         self.PhiP = PhiP
+
         self.PhiG = PhiG
 
 
@@ -118,6 +119,7 @@ class MWE_Swarm(object):
         self.nPeriodicCheckpoint = nPeriodicCheckpoint
 
         self.Output = Output
+
 
         self.Resume = Resume
 
@@ -194,6 +196,7 @@ class MWE_Swarm(object):
                 M = len(self.InitialGuess)
                 assert M==self.NumParticles
                 for i in range(M):
+
                     if isinstance(self.InitialGuess[i], (np.ndarray)):
                         self.Points[i] = self.InitialGuess[i]
                     elif isinstance(self.InitialGuess[i], (dict)):
@@ -202,17 +205,21 @@ class MWE_Swarm(object):
             # Initialise the particle function values
             p = Pool(self.Nthreads)
             self.Values = np.array( p.map(self.MyFunc, self.Points) )
+
             p.close()
 
             # Initialise each particle's best known position to initial position
             self.BestKnownPoints = self.Points
             self.BestKnownValues = self.Values
 
+
             # Update the swarm's best known position
             self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)]
+
             self.BestKnownSwarmValue = np.max(self.Values)
 
             # Calculate initial function value spread for switch condition
+
             self.InitialValSpread = np.ptp(self.Values)
 
     def QuadraticWindow(self, x):
