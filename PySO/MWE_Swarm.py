@@ -52,7 +52,7 @@ class MWE_Swarm(object):
         PhiP: float
             the phi_p parameter, cognitive coefficient for velocity updating [defaults to .2]
         PhiG: float
-            the phi_g parameter, social coefficinet for velocity updating [defaults to .2]
+            the phi_g parameter, social coefficient for velocity updating [defaults to .2]
         Tol: float
             the tol on the function value between, this is the spread in function values below which
             we consider the optimization algoritm to have converged [defaults to 1.0e-3]
@@ -105,6 +105,7 @@ class MWE_Swarm(object):
 
         self.Omega = Omega
         self.PhiP = PhiP
+
         self.PhiG = PhiG
 
 
@@ -118,6 +119,7 @@ class MWE_Swarm(object):
         self.nPeriodicCheckpoint = nPeriodicCheckpoint
 
         self.Output = Output
+
 
         self.Resume = Resume
 
@@ -186,7 +188,7 @@ class MWE_Swarm(object):
                     self.Points[i][j] = np.random.uniform(Low, High)
 
                     Range = abs(High-Low)
-                    vLow, vHigh = -Range/10., Range/10.
+                    vLow, vHigh = -Range/10., Range/10. #FIDDLE PARAMETER HERE
                     self.Velocities[i][j] = np.random.uniform(vLow, vHigh)
 
             # If provided, overwrite first M positions with initial guesses
@@ -194,6 +196,7 @@ class MWE_Swarm(object):
                 M = len(self.InitialGuess)
                 assert M==self.NumParticles
                 for i in range(M):
+
                     if isinstance(self.InitialGuess[i], (np.ndarray)):
                         self.Points[i] = self.InitialGuess[i]
                     elif isinstance(self.InitialGuess[i], (dict)):
@@ -202,17 +205,21 @@ class MWE_Swarm(object):
             # Initialise the particle function values
             p = Pool(self.Nthreads)
             self.Values = np.array( p.map(self.MyFunc, self.Points) )
+
             p.close()
 
             # Initialise each particle's best known position to initial position
             self.BestKnownPoints = self.Points
             self.BestKnownValues = self.Values
 
+
             # Update the swarm's best known position
             self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)]
+
             self.BestKnownSwarmValue = np.max(self.Values)
 
             # Calculate initial function value spread for switch condition
+            # Redundant now, need to remove
             self.InitialValSpread = np.ptp(self.Values)
 
     def QuadraticWindow(self, x):
@@ -407,28 +414,32 @@ class MWE_Swarm(object):
         outfile = os.path.join(self.Output, "FunctionValues.png")
         plt.savefig(outfile)
         plt.clf()
+        #
+        #
+        # # Trajectory for each pair of params
+        # for j, name_x in enumerate(self.Model.names):
+        #     for name_y in self.Model.names[j+1:]:
+        #         plt.figure()
+        #         for i in range(self.NumParticles):
+        #             traj = np.array(swarm_points[i::self.NumParticles])
+        #             plt.plot(traj[:,1+self.Model.names.index(name_x)], traj[:,1+self.Model.names.index(name_y)],
+        #                      '-', marker='o', markersize=3, color=palette[i], alpha=0.5)
+        #         plt.xlabel(name_x)
+        #         plt.ylabel(name_y)
+        #         outfile = os.path.join(self.Output, "EvolutionTrajectory_{0}_{1}.png".format(name_x, name_y))
+        #         plt.savefig(outfile)
+        #         plt.clf()
 
 
-        # Trajectory for each pair of params
-        for j, name_x in enumerate(self.Model.names):
-            for name_y in self.Model.names[j+1:]:
-                plt.figure()
-                for i in range(self.NumParticles):
-                    traj = np.array(swarm_points[i::self.NumParticles])
-                    plt.plot(traj[:,1+self.Model.names.index(name_x)], traj[:,1+self.Model.names.index(name_y)],
-                             '-', marker='o', markersize=3, color=palette[i], alpha=0.5)
-                plt.xlabel(name_x)
-                plt.ylabel(name_y)
-                outfile = os.path.join(self.Output, "EvolutionTrajectory_{0}_{1}.png".format(name_x, name_y))
-                plt.savefig(outfile)
-                plt.clf()
-
-
-    def Run(self):
+    def Run(self, segmenting=False):
         """
         Run optimisation
+
+        INPUTS:
+        segmenting: boolean
+            flag to indicate if we are transferring likelihoods
         """
-        self.InitialiseSwarm()
+        if segmenting==False: self.InitialiseSwarm()
 
         if self.SaveEvolution and self.EvolutionCounter==0:
             self.CreateEvolutionHistoryFile()
@@ -448,5 +459,7 @@ class MWE_Swarm(object):
 
         self.SaveFinalResults()
         if self.SaveEvolution: self.PlotSwarmEvolution()
+
+
 
 
