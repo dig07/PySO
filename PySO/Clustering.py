@@ -182,7 +182,7 @@ def Clustering(X,
     # run KMeans clustering on the data
     _, memberships = KMeans_clustering(X_std, K)
 
-    return {'num_clusters': K, 'cluster_membership':memberships}
+    return K, memberships
 
 
 if __name__=='__main__':
@@ -211,25 +211,25 @@ if __name__=='__main__':
 
     # Apply our clustering algorithm, searching for between 1 and 100 clusters
     # (take a look at the intertia plot saved in file test_elbow.png)
-    C = Clustering(pts, min_clusters=1, max_clusters=100,
+    K, memberships = Clustering(pts, min_clusters=1, max_clusters=100,
                     save_elbow_curve='test_elbow.png')
 
     # Plot the data, color coded by the detected cluster membership
     # (take a look at the intertia plot saved in file test_clusters.png)
-    fig1, axes = plt.subplots(nrows=ndim-1, ncols=ndim-1, figsize=(10, 10))
-    for col in np.arange(ndim-1):
-        for row in np.arange(ndim-1):
+    fig1, axes = plt.subplots(nrows=ndim, ncols=ndim, figsize=(10, 10))
+    for col in np.arange(ndim):
+        for row in np.arange(ndim):
 
-            for k in range(C['num_clusters']):
-                mask = (C['cluster_membership']==k)
-                axes[ndim-row-2,col].scatter(pts[mask][:,col], pts[mask][:,row],
+            for k in range(K):
+                mask = (memberships==k)
+                axes[ndim-row-1,col].scatter(pts[mask][:,col], pts[mask][:,row],
                                               marker='.', c='C'+str(k))
 
-            axes[ndim-row-2, col].set_xlabel("x"+str(col))
-            axes[ndim-row-2, col].set_ylabel("x"+str(row))
+            axes[ndim-row-1, col].set_xlabel("x"+str(col))
+            axes[ndim-row-1, col].set_ylabel("x"+str(row))
 
-            axes[ndim-row-2, col].set_xlim(-13, 13)
-            axes[ndim-row-2, col].set_ylim(-13, 13)
+            axes[ndim-row-1, col].set_xlim(-13, 13)
+            axes[ndim-row-1, col].set_ylim(-13, 13)
 
     plt.tight_layout()
     plt.savefig("test_clusters.png")
@@ -237,4 +237,4 @@ if __name__=='__main__':
 
     # Ideally, we should find the same number of clusters as there
     # were components in out original Gaussian mixture model
-    print("cluster detected =", C['num_clusters'], "of", nclusters)
+    print("cluster detected =", K, "of", nclusters)
