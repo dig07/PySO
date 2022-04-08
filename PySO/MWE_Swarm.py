@@ -144,6 +144,11 @@ class MWE_Swarm(object):
         # The velocity rule is the PSO standard rule
         self.VelocityRule = self.PSO_VelocityRule
 
+        # Only used for hierarchical PSO searches
+        self.Hierarchical_step = 0
+        self.Spreads = []
+        self.FuncHistory = []
+
     def MyFunc(self, p):
         """
         The function to be maximised.
@@ -219,8 +224,7 @@ class MWE_Swarm(object):
             self.BestKnownSwarmValue = np.max(self.Values)
 
             # Calculate initial function value spread for switch condition
-            # Redundant now, need to remove
-            self.InitialValSpread = np.ptp(self.Values)
+            self.Spreads.append(np.ptp(self.Values))
 
     def QuadraticWindow(self, x):
         """
@@ -288,6 +292,10 @@ class MWE_Swarm(object):
             self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)]
             self.BestKnownSwarmValue = np.max(self.Values)
 
+        # Append spreads
+        self.Spreads.append(np.ptp(self.Values))
+        # Append best Swarm value to history of best swarm values
+        self.FuncHistory.append(self.BestKnownSwarmValue)
 
     def Checkpoint(self):
         """
@@ -337,15 +345,6 @@ class MWE_Swarm(object):
         file1 = open(results_file, "w")
         file1.write(output_str)
         file1.close()
-
-
-    def SwitchCondition(self):
-        """
-        Determine if the swarm should should switch to sampling based on the initial logL method
-        """
-        # Switch to sampling when the spread of values are less than the threshold
-        return (np.ptp(self.Values) < self.alpha*self.InitialValSpread)
-
 
 
 

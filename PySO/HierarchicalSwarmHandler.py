@@ -2,7 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
-
+import copy
 
 from .Model import Model
 from .MWE_Swarm import MWE_Swarm as Swarm
@@ -10,10 +10,10 @@ from .MWE_Swarm import MWE_Swarm as Swarm
 
 
 
-class SwarmHandler(object):
+class HierarchicalSwarmHandler(object):
 
     def __init__(self,
-                 Models,
+                 Hierarchical_models,
                  NumSwarms,
                  NumParticlesPerSwarm,
                  Swarm_kwargs={},
@@ -23,16 +23,16 @@ class SwarmHandler(object):
                  Verbose = False,
                  SaveEvolution = False,
                  Maxiter = 1e4,
-                 Resume = True):
+                 Resume = True,
+                 Maximum_number_of_iterations_per_step=400,
+                 Minimum_exploration_iterations = 50,
+                 Initial_exploration_limit= 150):
         """
 
         REQUIRED INPUTS
         ------
-
-        Models: objects inheriting PySO.Model.Model, list or just an object
-            this defines the problem)
-            if just one object assume each swarm needs to target the same function to optimize/sample,
-            if list we each swarm targets a different function
+        Hierarchical_models: list,
+            list of Hierarchical model objects
         NumSwarms: int
             Number of Swarms to initialise.
         NumParticlesPerSwarm: list of ints,
@@ -58,15 +58,16 @@ class SwarmHandler(object):
             maximum number of iterations the ensemble will run for [defaults to 1e4]
         Resume: bool
             look for resume pkl file on startup and checkpoint during run [defaults to False]
+        Maximum_number_of_iterations_per_step: int
+            Maximum number of iterations per step
+        Minimum_exploration_iterations: int
+            Minimum number of iterations to be done in the exploring step before stall condition evaluated
         """
+        assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
-        if type(Models) == list:
-            self.Models = Models
-        else:
-            self.Models = [Models]*NumSwarms
+        self.Hierarchical_models = Hierarchical_models
 
-
-        self.Model_axis_names = self.Models[1].names
+        self.Model_axis_names = self.Hierarchical_models[1].names
 
         self.Ndim = len(self.Model_axis_names)
 
@@ -84,6 +85,14 @@ class SwarmHandler(object):
 
         self.SaveEvolution = SaveEvolution
 
+        # Refering to the hierarchical steps
+        self.Maximum_number_of_iterations_per_step = Maximum_number_of_iterations_per_step
+
+        self.Minimum_exploration_iterations = Minimum_exploration_iterations
+
+        self.Initial_exploration_limit = Initial_exploration_limit
+
+
         self.Maxiter = Maxiter
 
         self.Resume = Resume
@@ -93,9 +102,12 @@ class SwarmHandler(object):
         self.Swarm_names = Swarm_names
         if self.Swarm_names == None: self.Swarm_names = np.arange(self.NumSwarms) # Defaults to numbered list of swarms
 
-
         #Initialise swarms
         self.InitialiseSwarms()
+
+        self.finished_swarms = {}
+
+        self.swarm_stepping_done = False
 
         resume_file = os.path.join(self.Output, "PySO_resume.pkl")
 
@@ -103,13 +115,14 @@ class SwarmHandler(object):
             print('Resuming from file {}'.format(resume_file))
             self.ResumeFromCheckpoint()
 
+
     def InitialiseSwarms(self):
         """
         Initialise the swarm points, values and velocities
         #TODO need to allow the user to pass in the initial positions, velocities and target functions
 
         """
-        self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Models[swarm_index], self.NumParticlesPerSwarm, **self.Swarm_kwargs)
+        self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm, **self.Swarm_kwargs)
                        for swarm_index in range(len(self.Swarm_names))}
         initial_best_positions = []
         initial_max_func_vals = []
@@ -132,7 +145,7 @@ class SwarmHandler(object):
         """
         self.EvolutionCounter += 1
 
-        for name in self.Swarm_names:
+        for name in list(self.Swarms.keys()):
             self.Swarms[name].EvolveSwarm()
 
             # Update particle velocities
@@ -166,8 +179,6 @@ class SwarmHandler(object):
                     self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
                     self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
                     self.BestCurrentSwarm = name
-
-
     def Checkpoint(self):
         """
         Checkpoint swarm internal state
@@ -191,10 +202,13 @@ class SwarmHandler(object):
         """
         Print the current run status
         """
-        output_str  = "Iteration: {0}, ".format(self.EvolutionCounter)
-        output_str += "Max Value: {0} ".format(self.BestKnownEnsembleValue)
-        output_str += "at {0}, ".format(self.BestKnownEnsemblePoint)
-        output_str += "from swarm {0}".format(self.BestCurrentSwarm)
+        output_str  = "\n Iteration: {0} \n".format(self.EvolutionCounter)
+        for swarm_name in list(self.Swarms.keys()):
+            output_str += "\n"
+            output_str += "Swarm: {0}, ".format(swarm_name)
+            output_str += "Max value: {0}, ".format(self.Swarms[swarm_name].BestKnownSwarmValue)
+            output_str += "at {0}, ".format(self.Swarms[swarm_name].BestKnownSwarmPoint)
+            output_str += "with spread {0}".format(self.Swarms[swarm_name].Spreads[-1])
         print(output_str)
 
 
@@ -225,7 +239,7 @@ class SwarmHandler(object):
         history_file_path = os.path.join(self.Output, "EnsembleEvolutionHistory.dat")
 
         # "# particle_number, name1, name2, name3, ..., function_value\n"
-        for swarm_name in self.Swarm_names:
+        for swarm_name in list(self.Swarms.keys()):
             for particle_index in range(self.Swarms[swarm_name].NumParticles):
                 string = str(swarm_name) + ","
                 string += str(particle_index) + ","
@@ -250,6 +264,93 @@ class SwarmHandler(object):
         return( self.EvolutionCounter<self.Maxiter-1)
 
 
+    def check_hierarchical_step(self):
+        """
+        Checks if any of the swarms meet the condition to switch to the next model
+        """
+        #Initialise each swarm and work out the initial best position for the ensemble
+        for swarm_index, Swarm_ in enumerate(list(self.Swarms.values())):
+            # If the mean of the spreads computed across the last 10 iterations has not gotten lower,
+            #   Assume the system has stalled and thus conduct a hierarchical step
+
+            if Swarm_.EvolutionCounter > self.Minimum_exploration_iterations and self.EvolutionCounter > self.Initial_exploration_limit:
+
+                if self.stall_condition(Swarm_):
+
+                    print('Swarm ',str(list(self.Swarms.keys())[swarm_index]),' reached stall condition, switching optimization functions')
+
+                    if (Swarm_.Hierarchical_step+1) == len(self.Hierarchical_models):
+
+                        # Save final results
+                        Swarm_.SaveFinalResults()
+
+                        self.finished_swarms[str(list(self.Swarms.keys())[swarm_index])]  = Swarm_
+
+                        # Remove the swarm
+                        self.Swarms.pop(list(self.Swarms.keys())[swarm_index])
+
+                    else:
+                        self.Swarms[swarm_index] = self.hierarchical_step(Swarm_)
+
+        if len(list(self.Swarms.keys())) == 0:
+            self.swarm_stepping_done = True
+
+
+    def stall_condition(self,Swarm):
+        """
+        Evaluate stall condition for a given swarm
+        """
+        stalled = ((np.mean(Swarm.Spreads[-20:-10]) <= np.mean(Swarm.Spreads[-10:])) and
+         all(element == Swarm.FuncHistory[-20] for element in Swarm.FuncHistory[-20:]))
+        return stalled
+
+    def hierarchical_step(self, current_swarm):
+        """
+        Generates a new swarm with the same positions and velocities but forgetting the previous history of old swarm.
+
+        INPUTS:
+        -------
+        current_swarm: swarm object,
+            current swarm to hierarchical step into new swarm
+
+        RETURNS:
+        -------
+        newswarm: swarm object,
+            new swarm object optimizing the new model
+
+        """
+        print('Switching from ',self.Hierarchical_models[current_swarm.Hierarchical_step].segment_number, ' to ',
+              self.Hierarchical_models[current_swarm.Hierarchical_step+1].segment_number)
+        newswarm = Swarm(self.Hierarchical_models[current_swarm.Hierarchical_step+1],
+                                 current_swarm.NumParticles,
+                                 Output=current_swarm.Output,
+                                 Verbose=False,
+                                 nPeriodicCheckpoint=1,
+                                 # Final two args mean evolution is saved at every iteration. Only necessary if running current_swarm.Plot()
+                                 SaveEvolution=False,  ############
+                                 Tol=current_swarm.Tol, Nthreads=current_swarm.Nthreads,
+                                 Omega=current_swarm.Omega, PhiP=current_swarm.PhiP,
+                                 PhiG=current_swarm.PhiG, MaxIter=self.Maximum_number_of_iterations_per_step)
+        newswarm.Hierarchical_step = current_swarm.Hierarchical_step + 1
+        newswarm.EvolutionCounter = 0
+        newswarm.Periodic = current_swarm.Periodic
+        newswarm.Points = current_swarm.Points
+        newswarm.Velocities = current_swarm.Velocities
+
+        newswarm.BestKnownPoints = copy.deepcopy(current_swarm.Points)
+
+        # Recalculate best personal known values:
+        for i in range(newswarm.NumParticles):
+            newswarm.BestKnownValues[i] = newswarm.Model.log_likelihood(
+                dict(zip(newswarm.Model.names, newswarm.Points[i])))
+
+        newswarm.Values = copy.deepcopy(newswarm.BestKnownValues)
+
+        newswarm.BestKnownSwarmPoint = newswarm.BestKnownPoints[np.argmax(newswarm.BestKnownValues)]
+        newswarm.BestKnownSwarmValue = np.max(newswarm.BestKnownValues)
+
+        return (newswarm)
+
     def Run(self):
         """
         Run optmisation/sampling for all swarms
@@ -258,7 +359,7 @@ class SwarmHandler(object):
             self.CreateEvolutionHistoryFile()
             self.SaveEnsembleEvolution()
 
-        while self.ContinueCondition():
+        while self.ContinueCondition() and (self.swarm_stepping_done == False):
             self.EvolveSwarms()
 
             if self.EvolutionCounter % self.nPeriodicCheckpoint == 0:
@@ -266,6 +367,6 @@ class SwarmHandler(object):
                 if self.Verbose: self.PrintStatus()
 
                 if self.SaveEvolution: self.SaveEnsembleEvolution()
-
+            self.check_hierarchical_step()
 
         self.SaveFinalResults()
