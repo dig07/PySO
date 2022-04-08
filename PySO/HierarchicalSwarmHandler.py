@@ -145,7 +145,7 @@ class HierarchicalSwarmHandler(object):
         """
         self.EvolutionCounter += 1
 
-        for name in self.Swarm_names:
+        for name in list(self.Swarms.keys()):
             self.Swarms[name].EvolveSwarm()
 
             # Update particle velocities
@@ -203,7 +203,7 @@ class HierarchicalSwarmHandler(object):
         Print the current run status
         """
         output_str  = "\n Iteration: {0} \n".format(self.EvolutionCounter)
-        for swarm_name in self.Swarm_names:
+        for swarm_name in list(self.Swarms.keys()):
             output_str += "\n"
             output_str += "Swarm: {0}, ".format(swarm_name)
             output_str += "Max value: {0}, ".format(self.Swarms[swarm_name].BestKnownSwarmValue)
@@ -239,7 +239,7 @@ class HierarchicalSwarmHandler(object):
         history_file_path = os.path.join(self.Output, "EnsembleEvolutionHistory.dat")
 
         # "# particle_number, name1, name2, name3, ..., function_value\n"
-        for swarm_name in self.Swarm_names:
+        for swarm_name in list(self.Swarms.keys()):
             for particle_index in range(self.Swarms[swarm_name].NumParticles):
                 string = str(swarm_name) + ","
                 string += str(particle_index) + ","
@@ -269,12 +269,12 @@ class HierarchicalSwarmHandler(object):
         Checks if any of the swarms meet the condition to switch to the next model
         """
         #Initialise each swarm and work out the initial best position for the ensemble
-        for swarm_index, Swarm_ in enumerate(self.Swarms.values()):
+        for swarm_index, Swarm_ in enumerate(list(self.Swarms.values())):
             # If the mean of the spreads computed across the last 10 iterations has not gotten lower,
             #   Assume the system has stalled and thus conduct a heirachial step
             if Swarm_.EvolutionCounter > self.Minimum_exploration_iterations and self.EvolutionCounter > self.Initial_exploration_limit:
                 if self.stall_condition(Swarm_):
-                    print('Swarm ',str(self.Swarm_names[swarm_index]),' reached stall condition, switching optimization functions')
+                    print('Swarm ',str(list(self.Swarms.keys())[swarm_index]),' reached stall condition, switching optimization functions')
                     if (Swarm_.Hierarchical_step+1) == len(self.Hierarchical_models):
                         # Save final results
                         Swarm_.SaveFinalResults()
@@ -284,7 +284,7 @@ class HierarchicalSwarmHandler(object):
                         self.Swarms[swarm_index] = self.hierarchical_step(Swarm_)
 
         if len(list(self.Swarms.keys())) == 0:
-            self.swarm_stepping_done == True
+            self.swarm_stepping_done = True
 
 
     def stall_condition(self,Swarm):
