@@ -105,7 +105,7 @@ class HierarchicalSwarmHandler(object):
         #Initialise swarms
         self.InitialiseSwarms()
 
-
+        self.finished_swarms = {}
 
         self.swarm_stepping_done = False
 
@@ -271,15 +271,24 @@ class HierarchicalSwarmHandler(object):
         #Initialise each swarm and work out the initial best position for the ensemble
         for swarm_index, Swarm_ in enumerate(list(self.Swarms.values())):
             # If the mean of the spreads computed across the last 10 iterations has not gotten lower,
-            #   Assume the system has stalled and thus conduct a heirachial step
+            #   Assume the system has stalled and thus conduct a hierarchical step
+
             if Swarm_.EvolutionCounter > self.Minimum_exploration_iterations and self.EvolutionCounter > self.Initial_exploration_limit:
+
                 if self.stall_condition(Swarm_):
+
                     print('Swarm ',str(list(self.Swarms.keys())[swarm_index]),' reached stall condition, switching optimization functions')
+
                     if (Swarm_.Hierarchical_step+1) == len(self.Hierarchical_models):
+
                         # Save final results
                         Swarm_.SaveFinalResults()
+
+                        self.finished_swarms[str(list(self.Swarms.keys())[swarm_index])]  = Swarm_
+
                         # Remove the swarm
                         self.Swarms.pop(list(self.Swarms.keys())[swarm_index])
+
                     else:
                         self.Swarms[swarm_index] = self.hierarchical_step(Swarm_)
 
@@ -297,7 +306,6 @@ class HierarchicalSwarmHandler(object):
 
     def hierarchical_step(self, current_swarm):
         """
-
         Generates a new swarm with the same positions and velocities but forgetting the previous history of old swarm.
 
         INPUTS:
