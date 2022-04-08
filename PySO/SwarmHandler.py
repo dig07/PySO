@@ -135,37 +135,10 @@ class SwarmHandler(object):
         for name in self.Swarm_names:
             self.Swarms[name].EvolveSwarm()
 
-            # Update particle velocities
-            self.Swarms[name].Velocities = self.Swarms[name].VelocityRule()
-
-            # Update particle positions
-            self.Swarms[name].Points += self.Swarms[name].Velocities
-
-            # Enforce point to be within bounds
-            self.Swarms[name].EnforceBoundaries()
-
-            # Update function values
-            p = Pool(self.Swarms[name].Nthreads)
-            self.Swarms[name].Values = np.array(p.map(self.Swarms[name].MyFunc, self.Swarms[name].Points))
-            p.close()
-
-            # Update particle's best known position
-            new_best_known_values = np.maximum(self.Swarms[name].BestKnownValues, self.Swarms[name].Values)
-
-            self.Swarms[name].BestKnownPoints = np.where(np.tile(new_best_known_values == self.Swarms[name].BestKnownValues, self.Ndim).reshape(
-                (self.Ndim, self.Swarms[name].NumParticles)).T,
-                                            self.Swarms[name].BestKnownPoints, self.Swarms[name].Points)
-            self.Swarms[name].BestKnownValues = new_best_known_values
-
-            # Update swarm's best known position
-            if np.max(self.Swarms[name].Values) > self.Swarms[name].BestKnownSwarmValue:
-                self.Swarms[name].BestKnownSwarmPoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
-                self.Swarms[name].BestKnownSwarmValue = np.max(self.Swarms[name].Values)
-                #Update the ensembles best position if required
-                if np.max(self.Swarms[name].BestKnownSwarmValue) > self.BestKnownEnsembleValue:
-                    self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
-                    self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
-                    self.BestCurrentSwarm = name
+            if np.max(self.Swarms[name].BestKnownSwarmValue) > self.BestKnownEnsembleValue:
+                self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
+                self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
+                self.BestCurrentSwarm = name
 
 
     def Checkpoint(self):

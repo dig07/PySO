@@ -148,37 +148,30 @@ class HierarchicalSwarmHandler(object):
         for name in list(self.Swarms.keys()):
             self.Swarms[name].EvolveSwarm()
 
-            # Update particle velocities
-            self.Swarms[name].Velocities = self.Swarms[name].VelocityRule()
+            if np.max(self.Swarms[name].BestKnownSwarmValue) > self.BestKnownEnsembleValue:
+                self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
+                self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
+                self.BestCurrentSwarm = name
 
-            # Update particle positions
-            self.Swarms[name].Points += self.Swarms[name].Velocities
+    def Reallocate_particles(self):
+        """Use all particles in current swarms, cluster them based on features and reallocate"""
 
-            # Enforce point to be within bounds
-            self.Swarms[name].EnforceBoundaries()
+        # Feature_array - Particle positions, function values, not all components (Specially not ones well measured)
 
-            # Update function values
-            p = Pool(self.Swarms[name].Nthreads)
-            self.Swarms[name].Values = np.array(p.map(self.Swarms[name].MyFunc, self.Swarms[name].Points))
-            p.close()
+        # K, memberships = clustering(Features)
 
-            # Update particle's best known position
-            new_best_known_values = np.maximum(self.Swarms[name].BestKnownValues, self.Swarms[name].Values)
+        # for swarm in range(K):
 
-            self.Swarms[name].BestKnownPoints = np.where(np.tile(new_best_known_values == self.Swarms[name].BestKnownValues, self.Ndim).reshape(
-                (self.Ndim, self.Swarms[name].NumParticles)).T,
-                                            self.Swarms[name].BestKnownPoints, self.Swarms[name].Points)
-            self.Swarms[name].BestKnownValues = new_best_known_values
+            # build new swarm for each K assign to dictionary
 
-            # Update swarm's best known position
-            if np.max(self.Swarms[name].Values) > self.Swarms[name].BestKnownSwarmValue:
-                self.Swarms[name].BestKnownSwarmPoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
-                self.Swarms[name].BestKnownSwarmValue = np.max(self.Swarms[name].Values)
-                #Update the ensembles best position if required
-                if np.max(self.Swarms[name].BestKnownSwarmValue) > self.BestKnownEnsembleValue:
-                    self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
-                    self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
-                    self.BestCurrentSwarm = name
+            # Summarise the clustering and put into save file somehow
+
+            # Allow a few merges and allow quite a few more splits
+
+
+
+
+
     def Checkpoint(self):
         """
         Checkpoint swarm internal state
