@@ -5,8 +5,8 @@ from multiprocessing import Pool
 import copy
 
 from .Model import Model
+from PySO.Clustering_Swarms import Clustering
 from .MWE_Swarm import MWE_Swarm as Swarm
-
 
 
 
@@ -26,7 +26,8 @@ class HierarchicalSwarmHandler(object):
                  Resume = True,
                  Maximum_number_of_iterations_per_step=400,
                  Minimum_exploration_iterations = 50,
-                 Initial_exploration_limit= 150):
+                 Initial_exploration_limit= 150,
+                 clustering_indices = None):
         """
 
         REQUIRED INPUTS
@@ -61,7 +62,11 @@ class HierarchicalSwarmHandler(object):
         Maximum_number_of_iterations_per_step: int
             Maximum number of iterations per step
         Minimum_exploration_iterations: int
-            Minimum number of iterations to be done in the exploring step before stall condition evaluated
+            Minimum number of iterations to be done in each step before stall condition evaluated
+        Initial_exploration_limit: int
+            Minimum number of iterations done in the very first step before stall condition evaluated
+        clustering_indices: None or list of int
+            Parameter position indexes to use for relabelling/clustering step
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -102,10 +107,19 @@ class HierarchicalSwarmHandler(object):
         self.Swarm_names = Swarm_names
         if self.Swarm_names == None: self.Swarm_names = np.arange(self.NumSwarms) # Defaults to numbered list of swarms
 
+
+        self.clustering_indices  = clustering_indices
+        if self.clustering_indices == None: self.clustering_indices = np.arange(self.Ndim) # Use all parameters by default in clustering
+
         #Initialise swarms
         self.InitialiseSwarms()
 
-        self.finished_swarms = {}
+        self.frozen_swarms = {}
+
+        self.Hierarchical_model_counter = 0
+
+        # Boolean variable to indicate if all swarms at the current level have stalled
+        self.AllStalled = False
 
         self.swarm_stepping_done = False
 
@@ -156,17 +170,94 @@ class HierarchicalSwarmHandler(object):
     def Reallocate_particles(self):
         """Use all particles in current swarms, cluster them based on features and reallocate"""
 
+        # Extract positions to be used for clustering, only using the indices of parameters that are well measured AND function value     #
         # Feature_array - Particle positions, function values, not all components (Specially not ones well measured)
+        # Chirp mass, distance, sky position, effective spin, time to merger, function values
 
-        # K, memberships = clustering(Features)
+        clustering_parameter_positions = np.array([np.take(self.frozen_swarms[swarm_index].Points,self.clustering_indices,axis=1) for swarm_index
+                               in self.frozen_swarms.keys()])
+        clustering_function_values = np.array([self.frozen_swarms[swarm_index].Values for swarm_index
+                               in self.frozen_swarms.keys()])
 
-        # for swarm in range(K):
+        clustering_function_values = clustering_function_values.reshape(clustering_function_values.shape[1],)
+        clustering_parameter_positions = clustering_parameter_positions.reshape(len(clustering_function_values),len(self.clustering_indices))
 
-            # build new swarm for each K assign to dictionary
 
-            # Summarise the clustering and put into save file somehow
+        # CHECK IF THIS IS THE RIGHT SHAPE (NUMPARTICLES, CLUSTERING_POSITIONS + 1 (FOR FUNCTION VALUES))!!!!!!
+        clustering_features = np.column_stack((clustering_parameter_positions, clustering_function_values))
 
-            # Allow a few merges and allow quite a few more splits
+
+        K, memberships = Clustering(clustering_features)
+
+
+        total_particle_positions = np.array([self.frozen_swarms[swarm_index].Points for swarm_index
+                               in self.frozen_swarms.keys()])
+        total_particle_velocities = np.array([self.frozen_swarms[swarm_index].Velocities for swarm_index
+                               in self.frozen_swarms.keys()])
+
+        total_particle_velocities = total_particle_velocities.reshape(len(clustering_function_values),self.Ndim)
+        total_particle_positions = total_particle_positions.reshape(len(clustering_function_values),self.Ndim)
+
+
+
+        for swarm_index in range(K):
+
+              swarm_particle_positions = total_particle_positions[np.where(memberships == swarm_index)[0]]
+              swarm_particle_velocities = total_particle_velocities[np.where(memberships == swarm_index)[0]]
+              if swarm_particle_velocities.shape[0] == 1: continue # Ignore clusters with just 1 particle in them
+              self.Swarms[swarm_index] = self.Reinitiate_swarm(swarm_particle_positions, swarm_particle_velocities)
+
+        self.frozen_swarms = {}
+        self.AllStalled = False
+
+
+        #     Allow a few merges and allow quite a few more splits
+
+    def Reinitiate_swarm(self,positions,velocities):
+        """
+        Reinitiate swarm given some positions and velocities.
+
+        INPUTS:
+        ------
+        positions: array (number of particles, self.Ndim)
+            initial positions for new swarm
+        velocities: array (number of particles, self.Ndim)
+            initial velocities for new swarm particles
+
+        RETURNS:
+        ------
+        newswarm: swarm object
+            new swarm initiated
+        """
+
+        num_particles = positions.shape[0]
+
+        newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter+ 1],
+                         num_particles,
+                         Verbose=False,
+                         # Final two args mean evolution is saved at every iteration. Only necessary if running current_swarm.Plot()
+                         SaveEvolution=False,  ############
+                         Tol=self.Swarm_kwargs['Tol'], Nthreads=self.Swarm_kwargs['Nthreads'],
+                         Omega=self.Swarm_kwargs['Omega'], PhiP=self.Swarm_kwargs['PhiP'],
+                         PhiG=self.Swarm_kwargs['PhiG'], MaxIter=self.Maximum_number_of_iterations_per_step)
+
+        newswarm.EvolutionCounter = 0
+        newswarm.Points = positions
+        newswarm.Velocities = velocities
+
+        newswarm.BestKnownPoints = copy.deepcopy(newswarm.Points)
+
+        # Recalculate best personal known values:
+        for i in range(newswarm.NumParticles):
+            newswarm.BestKnownValues[i] = newswarm.Model.log_likelihood(
+                dict(zip(newswarm.Model.names, newswarm.Points[i])))
+
+        newswarm.Values = copy.deepcopy(newswarm.BestKnownValues)
+
+        newswarm.BestKnownSwarmPoint = newswarm.BestKnownPoints[np.argmax(newswarm.BestKnownValues)]
+        newswarm.BestKnownSwarmValue = np.max(newswarm.BestKnownValues)
+
+        return (newswarm)
 
 
 
@@ -261,32 +352,33 @@ class HierarchicalSwarmHandler(object):
         """
         Checks if any of the swarms meet the condition to switch to the next model
         """
-        #Initialise each swarm and work out the initial best position for the ensemble
-        for swarm_index, Swarm_ in enumerate(list(self.Swarms.values())):
-            # If the mean of the spreads computed across the last 10 iterations has not gotten lower,
-            #   Assume the system has stalled and thus conduct a hierarchical step
 
-            if Swarm_.EvolutionCounter > self.Minimum_exploration_iterations and self.EvolutionCounter > self.Initial_exploration_limit:
 
-                if self.stall_condition(Swarm_):
+        if self.AllStalled == False:
 
-                    print('Swarm ',str(list(self.Swarms.keys())[swarm_index]),' reached stall condition, switching optimization functions')
+            for swarm_index, Swarm_ in enumerate(list(self.Swarms.values())):
 
-                    if (Swarm_.Hierarchical_step+1) == len(self.Hierarchical_models):
+                # If the mean of the spreads computed across the last 10 iterations has not gotten lower,
+                #   Assume the swarm has stalled and thus conduct a hierarchical step
 
-                        # Save final results
-                        Swarm_.SaveFinalResults()
+                if Swarm_.EvolutionCounter > self.Minimum_exploration_iterations and self.EvolutionCounter > self.Initial_exploration_limit:
 
-                        self.finished_swarms[str(list(self.Swarms.keys())[swarm_index])]  = Swarm_
+                    if self.stall_condition(Swarm_):
 
-                        # Remove the swarm
+                        print('Swarm ',str(list(self.Swarms.keys())[swarm_index]),' reached stall condition, freezing')
+
+                        # Freeze until all swarms have been stalled in this given segment likelihood
+
+                        self.frozen_swarms[list(self.Swarms.keys())[swarm_index]] = Swarm_
+
                         self.Swarms.pop(list(self.Swarms.keys())[swarm_index])
 
-                    else:
-                        self.Swarms[swarm_index] = self.hierarchical_step(Swarm_)
+                        # If all the swarms have stalled:
+                        if len(list(self.Swarms.values())) == 0: self.AllStalled = True
 
-        if len(list(self.Swarms.keys())) == 0:
-            self.swarm_stepping_done = True
+            if self.AllStalled:
+                print('\n All swarms stalled! Switching segments')
+                self.Reallocate_particles()
 
 
     def stall_condition(self,Swarm):

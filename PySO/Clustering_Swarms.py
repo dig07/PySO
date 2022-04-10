@@ -30,7 +30,7 @@ def Standardize(X):
     """
     scaler = StandardScaler()
     scaler.fit(X)
-    return scaler.transform(pts, copy=True)
+    return scaler.transform(X, copy=True)
 
 
 def KMeans_clustering(X_std, K):
@@ -238,3 +238,4 @@ if __name__=='__main__':
     # Ideally, we should find the same number of clusters as there
     # were components in out original Gaussian mixture model
     print("cluster detected =", K, "of", nclusters)
+
