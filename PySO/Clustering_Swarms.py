@@ -2,7 +2,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-import warnings
+import warnings as warning
 
 from kneed import KneeLocator
 

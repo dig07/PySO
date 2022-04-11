@@ -179,11 +179,9 @@ class HierarchicalSwarmHandler(object):
         clustering_function_values = np.array([self.frozen_swarms[swarm_index].Values for swarm_index
                                in self.frozen_swarms.keys()])
 
-        clustering_function_values = clustering_function_values.reshape(clustering_function_values.shape[1],)
-        clustering_parameter_positions = clustering_parameter_positions.reshape(len(clustering_function_values),len(self.clustering_indices))
+        clustering_parameter_positions = np.concatenate(clustering_parameter_positions)
+        clustering_function_values = np.concatenate(clustering_function_values)
 
-
-        # CHECK IF THIS IS THE RIGHT SHAPE (NUMPARTICLES, CLUSTERING_POSITIONS + 1 (FOR FUNCTION VALUES))!!!!!!
         clustering_features = np.column_stack((clustering_parameter_positions, clustering_function_values))
 
 
@@ -195,8 +193,8 @@ class HierarchicalSwarmHandler(object):
         total_particle_velocities = np.array([self.frozen_swarms[swarm_index].Velocities for swarm_index
                                in self.frozen_swarms.keys()])
 
-        total_particle_velocities = total_particle_velocities.reshape(len(clustering_function_values),self.Ndim)
-        total_particle_positions = total_particle_positions.reshape(len(clustering_function_values),self.Ndim)
+        total_particle_velocities = np.concatenate(total_particle_velocities)
+        total_particle_positions = np.concatenate(total_particle_positions)
 
 
 
@@ -210,8 +208,7 @@ class HierarchicalSwarmHandler(object):
         self.frozen_swarms = {}
         self.AllStalled = False
 
-
-        #     Allow a few merges and allow quite a few more splits
+        self.Hierarchical_model_counter += 1
 
     def Reinitiate_swarm(self,positions,velocities):
         """
@@ -356,7 +353,7 @@ class HierarchicalSwarmHandler(object):
 
         if self.AllStalled == False:
 
-            for swarm_index, Swarm_ in enumerate(list(self.Swarms.values())):
+            for swarm_index, Swarm_ in zip(list(self.Swarms.keys()),list(self.Swarms.values())):
 
                 # If the mean of the spreads computed across the last 10 iterations has not gotten lower,
                 #   Assume the swarm has stalled and thus conduct a hierarchical step
@@ -365,20 +362,27 @@ class HierarchicalSwarmHandler(object):
 
                     if self.stall_condition(Swarm_):
 
-                        print('Swarm ',str(list(self.Swarms.keys())[swarm_index]),' reached stall condition, freezing')
+                        print('\n Swarm ',str(swarm_index),' reached stall condition, freezing')
 
                         # Freeze until all swarms have been stalled in this given segment likelihood
 
-                        self.frozen_swarms[list(self.Swarms.keys())[swarm_index]] = Swarm_
+                        self.frozen_swarms[swarm_index] = Swarm_
 
-                        self.Swarms.pop(list(self.Swarms.keys())[swarm_index])
+                        self.Swarms.pop(swarm_index)
 
                         # If all the swarms have stalled:
                         if len(list(self.Swarms.values())) == 0: self.AllStalled = True
 
             if self.AllStalled:
-                print('\n All swarms stalled! Switching segments')
-                self.Reallocate_particles()
+
+                if self.Hierarchical_model_counter+1 == len(self.Hierarchical_models):
+                    print('\n All swarms stalled on the last model, finishing up!')
+                    self.swarm_stepping_done = True
+
+                else:
+                    print('\n All swarms stalled! Switching segments from ', str(self.Hierarchical_models[self.Hierarchical_model_counter].segment_number),
+                          ' to ', str(self.Hierarchical_models[self.Hierarchical_model_counter+1].segment_number))
+                    self.Reallocate_particles()
 
 
     def stall_condition(self,Swarm):
@@ -389,52 +393,6 @@ class HierarchicalSwarmHandler(object):
          all(element == Swarm.FuncHistory[-20] for element in Swarm.FuncHistory[-20:]))
         return stalled
 
-    def hierarchical_step(self, current_swarm):
-        """
-        Generates a new swarm with the same positions and velocities but forgetting the previous history of old swarm.
-
-        INPUTS:
-        -------
-        current_swarm: swarm object,
-            current swarm to hierarchical step into new swarm
-
-        RETURNS:
-        -------
-        newswarm: swarm object,
-            new swarm object optimizing the new model
-
-        """
-        print('Switching from ',self.Hierarchical_models[current_swarm.Hierarchical_step].segment_number, ' to ',
-              self.Hierarchical_models[current_swarm.Hierarchical_step+1].segment_number)
-        newswarm = Swarm(self.Hierarchical_models[current_swarm.Hierarchical_step+1],
-                                 current_swarm.NumParticles,
-                                 Output=current_swarm.Output,
-                                 Verbose=False,
-                                 nPeriodicCheckpoint=1,
-                                 # Final two args mean evolution is saved at every iteration. Only necessary if running current_swarm.Plot()
-                                 SaveEvolution=False,  ############
-                                 Tol=current_swarm.Tol, Nthreads=current_swarm.Nthreads,
-                                 Omega=current_swarm.Omega, PhiP=current_swarm.PhiP,
-                                 PhiG=current_swarm.PhiG, MaxIter=self.Maximum_number_of_iterations_per_step)
-        newswarm.Hierarchical_step = current_swarm.Hierarchical_step + 1
-        newswarm.EvolutionCounter = 0
-        newswarm.Periodic = current_swarm.Periodic
-        newswarm.Points = current_swarm.Points
-        newswarm.Velocities = current_swarm.Velocities
-
-        newswarm.BestKnownPoints = copy.deepcopy(current_swarm.Points)
-
-        # Recalculate best personal known values:
-        for i in range(newswarm.NumParticles):
-            newswarm.BestKnownValues[i] = newswarm.Model.log_likelihood(
-                dict(zip(newswarm.Model.names, newswarm.Points[i])))
-
-        newswarm.Values = copy.deepcopy(newswarm.BestKnownValues)
-
-        newswarm.BestKnownSwarmPoint = newswarm.BestKnownPoints[np.argmax(newswarm.BestKnownValues)]
-        newswarm.BestKnownSwarmValue = np.max(newswarm.BestKnownValues)
-
-        return (newswarm)
 
     def Run(self):
         """
