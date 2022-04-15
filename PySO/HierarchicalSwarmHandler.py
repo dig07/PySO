@@ -307,7 +307,7 @@ class HierarchicalSwarmHandler(object):
         header_string = "swarm_number,particle_number,"
         for name in self.Model_axis_names:
             header_string += name + ","
-        header_string = header_string + "function_value\n"
+        header_string = header_string + "function_value,HierarchicalModelNumber,IterationNumber\n"
 
         file = open(history_file_path, "w")
         file.write(header_string)
@@ -325,11 +325,25 @@ class HierarchicalSwarmHandler(object):
                 string = str(swarm_name) + ","
                 string += str(particle_index) + ","
                 string += np.array2string(self.Swarms[swarm_name].Points[particle_index], separator=',')[1:-1].replace('\n', '')
-                string += ",{}\n".format(self.Swarms[swarm_name].Values[particle_index])
+                string += ",{}".format(self.Swarms[swarm_name].Values[particle_index])
+                string += ",{}".format(self.Hierarchical_model_counter)
+                string += ",{}\n".format(self.EvolutionCounter)
                 file = open(history_file_path, "a")
                 file.write(string)
                 file.close()
 
+        # All the frozen swarm data
+        for swarm_name in list(self.frozen_swarms.keys()):
+            for particle_index in range(self.frozen_swarms[swarm_name].NumParticles):
+                string = str(swarm_name) + ","
+                string += str(particle_index) + ","
+                string += np.array2string(self.frozen_swarms[swarm_name].Points[particle_index], separator=',')[1:-1].replace('\n', '')
+                string += ",{}".format(self.frozen_swarms[swarm_name].Values[particle_index])
+                string += ",{}".format(self.Hierarchical_model_counter)
+                string += ",{}\n".format(self.EvolutionCounter)
+                file = open(history_file_path, "a")
+                file.write(string)
+                file.close()
     def SaveFinalResults(self):
         """
         Save the final results to file
