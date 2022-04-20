@@ -239,7 +239,6 @@ class MWE_Swarm(object):
         """
         # Periodic BCs
         self.Points = self.BoundsArray[:,0] + (self.Points-self.BoundsArray[:,0]) % self.PeriodicParamRanges
-
         # Hard edges
         self.Points = np.clip(self.Points, self.BoundsArray[:,0], self.BoundsArray[:,1])
 
@@ -256,8 +255,8 @@ class MWE_Swarm(object):
                                   ).reshape((self.NumParticles, self.Ndim))
 
         return ( self.Omega * self.Velocities
-               + self.PhiP * np.random.uniform() * ( self.BestKnownPoints - self.Points )
-               + self.PhiG * np.random.uniform() * ( best_known_swarm_point - self.Points) )
+               + self.PhiP * np.random.uniform(size=self.NumParticles).reshape((self.NumParticles,1)) * ( self.BestKnownPoints - self.Points )
+               + self.PhiG * np.random.uniform(size=self.NumParticles).reshape((self.NumParticles,1)) * ( best_known_swarm_point - self.Points) )
 
 
 

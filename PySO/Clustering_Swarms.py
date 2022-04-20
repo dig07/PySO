@@ -2,7 +2,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-import warnings
+import warnings as warning
 
 from kneed import KneeLocator
 
@@ -112,7 +112,7 @@ def NumberOfClusters(X_std,
         K = knee_loc.knee
     else:
         W = "Can't determine Nclusters, using min value K="+str(min_clusters)
-        warnings.warn(W)
+        warning.warn(W)
         K = min_clusters
 
     # make summary 'elbow' plot for visual inspection
@@ -161,7 +161,7 @@ def RemoveSmallClusters(X_std, kmeans, min_membership):
         W = "Clustering failed:"
         W += " all clusters below min size = {}".format(min_membership)
         W += " (returning points with no clustering)"
-        warnings.warn(W)
+        warning.warn(W)
         return 1, np.ones_like(memberships)
 
     # keep only cluster above min size
@@ -172,7 +172,7 @@ def RemoveSmallClusters(X_std, kmeans, min_membership):
     W = "Removing {0} clusters with {1} particles ".format(
                         np.sum(small_clusters),
                         unique_counts[small_clusters])
-    warnings.warn(W)
+    warning.warn(W)
 
     K = np.sum(big_clusters)
     memberships = kmeans.predict(X_std)
@@ -264,7 +264,7 @@ def main():
 
     pts = mixture_model.sample(npoints)
 
-    pts = np.vstack((pts, 20*np.ones(ndim)))
+    pts = np.vstack((pts, 30*np.ones(ndim)))
 
     # Apply our clustering algorithm, searching for between 1 and 100 clusters
     # (take a look at the intertia plot saved in file test_elbow.png)
@@ -285,8 +285,8 @@ def main():
             axes[ndim-row-1, col].set_xlabel("x"+str(col))
             axes[ndim-row-1, col].set_ylabel("x"+str(row))
 
-            axes[ndim-row-1, col].set_xlim(-21, 21)
-            axes[ndim-row-1, col].set_ylim(-21, 21)
+            axes[ndim-row-1, col].set_xlim(-31, 31)
+            axes[ndim-row-1, col].set_ylim(-31, 31)
 
     plt.tight_layout()
     plt.savefig("test_clusters.png")
