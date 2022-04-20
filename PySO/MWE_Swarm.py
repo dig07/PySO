@@ -239,11 +239,12 @@ class MWE_Swarm(object):
         """
         # Periodic BCs
         self.Points = self.BoundsArray[:,0] + (self.Points-self.BoundsArray[:,0]) % self.PeriodicParamRanges
+
         # Hard edges
         self.Points = np.clip(self.Points, self.BoundsArray[:,0], self.BoundsArray[:,1])
 
         # Smoothly window the normal components of velocities to zero at the boundary
-        self.Velocities *= self.QuadraticWindow( (self.Points-self.BoundsArray[:,0])/np.ptp(self.BoundsArray) )
+        # self.Velocities *= self.QuadraticWindow( (self.Points-self.BoundsArray[:,0])/np.ptp(self.BoundsArray) )
 
 
     def PSO_VelocityRule(self):
