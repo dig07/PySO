@@ -16,6 +16,9 @@ class HierarchicalSwarmHandler(object):
                  Hierarchical_models,
                  NumSwarms,
                  NumParticlesPerSwarm,
+                 Omega = 0.6,
+                 PhiP = 0.2,
+                 PhiG = 0.2,
                  Swarm_kwargs={},
                  Output = './',
                  nPeriodicCheckpoint = 10,
@@ -42,6 +45,12 @@ class HierarchicalSwarmHandler(object):
 
         OPTIONAL INPUTS
         ---------------
+        Omega: float or list
+            the omega parameter for each hierarhical model, inertial coefficient for velocity updating [defaults to .6]
+        PhiP: float or list
+            the phi_p parameter for each hierarhical model, cognitive coefficient for velocity updating [defaults to .2]
+        PhiG: float or list
+            the phi_g parameter for each hierarhical model, social coefficient for velocity updating [defaults to .2]
         Swarm_kwargs: dict,
             dictionary of common arguments between all swarms
         Output: str
@@ -71,6 +80,18 @@ class HierarchicalSwarmHandler(object):
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
         self.Hierarchical_models = Hierarchical_models
+
+        self.Omegas = Omega
+        self.PhiPs = PhiP
+        self.PhiGs = PhiG
+
+        if type(self.Omegas) == float:
+            self.Omegas = [self.Omegas] * len(self.Hierarchical_models)
+            self.PhiPs = [self.PhiPs] * len(self.Hierarchical_models)
+            self.PhiGs = [self.PhiGs] * len(self.Hierarchical_models)
+        else:
+            assert len(self.Omegas) == len(self.Hierarchical_models), "Please ensure your PSO parameter lists correspond to the correct number of hierarchical steps "
+
 
         self.Model_axis_names = self.Hierarchical_models[1].names
 
@@ -136,7 +157,8 @@ class HierarchicalSwarmHandler(object):
         #TODO need to allow the user to pass in the initial positions, velocities and target functions
 
         """
-        self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm, **self.Swarm_kwargs)
+        self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
+                                                            Omega=self.Omegas[0], PhiG= self.PhiGs[0], PhiP=self.PhiPs[0], **self.Swarm_kwargs)
                        for swarm_index in range(len(self.Swarm_names))}
         initial_best_positions = []
         initial_max_func_vals = []
@@ -185,7 +207,7 @@ class HierarchicalSwarmHandler(object):
         clustering_features = np.column_stack((clustering_parameter_positions, clustering_function_values))
 
 
-        K, memberships = Clustering(clustering_features)
+        K, memberships = Clustering(clustering_features, min_membership=10)
 
 
         total_particle_positions = np.array([self.frozen_swarms[swarm_index].Points for swarm_index
@@ -202,7 +224,6 @@ class HierarchicalSwarmHandler(object):
 
               swarm_particle_positions = total_particle_positions[np.where(memberships == swarm_index)[0]]
               swarm_particle_velocities = total_particle_velocities[np.where(memberships == swarm_index)[0]]
-              if swarm_particle_velocities.shape[0] == 1: continue # Ignore clusters with just 1 particle in them
               self.Swarms[swarm_index] = self.Reinitiate_swarm(swarm_particle_positions, swarm_particle_velocities)
 
         self.frozen_swarms = {}
@@ -235,8 +256,8 @@ class HierarchicalSwarmHandler(object):
                          # Final two args mean evolution is saved at every iteration. Only necessary if running current_swarm.Plot()
                          SaveEvolution=False,  ############
                          Tol=self.Swarm_kwargs['Tol'], Nthreads=self.Swarm_kwargs['Nthreads'],
-                         Omega=self.Swarm_kwargs['Omega'], PhiP=self.Swarm_kwargs['PhiP'],
-                         PhiG=self.Swarm_kwargs['PhiG'], MaxIter=self.Maximum_number_of_iterations_per_step)
+                         Omega=self.Omegas[self.Hierarchical_model_counter+1], PhiP=self.PhiPs[self.Hierarchical_model_counter+1],
+                         PhiG=self.PhiGs[self.Hierarchical_model_counter+1], MaxIter=self.Maximum_number_of_iterations_per_step)
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions
