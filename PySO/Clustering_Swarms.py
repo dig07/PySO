@@ -132,6 +132,9 @@ def NumberOfClusters(X_std,
 
 def RemoveSmallClusters(X_std, kmeans, min_membership):
     """
+    Any clusters below a certain size are removed and their members
+    assigned to the nearest cluster
+    
     INPUTS
     ------
     X_std: array, shape=(n,p)
@@ -205,7 +208,8 @@ def Clustering(X,
     min_membership: int or None
         the minimum number of points in a cluster
         for example, if this is set to 5, then any clusters with 4 or
-        fewer members will
+        fewer members will be disbanded and the members reassigned to the
+        nearest remaining cluster
     save_elbow_curve: str
         if None, then do not produce the elbow curve plot, else
         this argument is the filname where plot is to be saved
