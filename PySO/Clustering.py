@@ -12,6 +12,8 @@ from scipy.interpolate import interp1d
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
+from pomegranate import *
+
 
 def Standardize(X):
     """
@@ -30,7 +32,7 @@ def Standardize(X):
     """
     scaler = StandardScaler()
     scaler.fit(X)
-    return scaler.transform(pts, copy=True)
+    return scaler.transform(X, copy=True)
 
 
 def KMeans_clustering(X_std, K):
@@ -55,12 +57,12 @@ def KMeans_clustering(X_std, K):
         identifying the cluster to which it belongs
     """
     kmeans = KMeans(n_clusters=K)
-    c = kmeans.fit(X_std)
+    kmeans.fit(X_std)
 
-    I = c.inertia_
-    memberships = kmeans.fit_predict(X_std)
+    I = kmeans.inertia_
+    memberships = kmeans.labels_
 
-    return I, memberships
+    return I, memberships, kmeans
 
 
 def NumberOfClusters(X_std,
@@ -100,7 +102,7 @@ def NumberOfClusters(X_std,
     nclusters = np.arange(min_clusters, max_clusters+1)
     distorsions = np.zeros_like(nclusters)
     for i, k in enumerate(nclusters):
-        I, _ = KMeans_clustering(X_std, k)
+        I, _, _ = KMeans_clustering(X_std, k)
         distorsions[i] = np.sqrt(I)
 
     # find the 'elbow' in the inertia curve
@@ -110,7 +112,7 @@ def NumberOfClusters(X_std,
         K = knee_loc.knee
     else:
         W = "Can't determine Nclusters, using min value K="+str(min_clusters)
-        warning.warn(W)
+        warnings.warn(W)
         K = min_clusters
 
     # make summary 'elbow' plot for visual inspection
@@ -128,9 +130,60 @@ def NumberOfClusters(X_std,
     return K
 
 
+def RemoveSmallClusters(X_std, kmeans, min_membership):
+    """
+    INPUTS
+    ------
+    X_std: array, shape=(n,p)
+        the positions of the n particles in the p-dimensional space
+        standardised to zero-mean and unit-variance form
+    kmeans: K-Means
+        instance of sklearn K-Means clustering class
+    min_membership: int
+        the minimum number of points in a cluster
+
+    RETURNS
+    -------
+    K: int
+        the number of clusters used by KMeans
+    memberships: array, shape=(n,)
+        for each particle, return an int identifying the cluster
+        to which it belongs
+    """
+    unique, unique_counts = np.unique(kmeans.labels_, return_counts=True)
+
+    if not any(unique_counts<min_membership):
+        # all the clusters are already of an appropriate size... do nothing
+        return kmeans.n_clusters, kmeans.labels_
+
+    if all(unique_counts<min_membership):
+        # all of the clusters are too small... oh dear
+        W = "Clustering failed:"
+        W += " all clusters below min size = {}".format(min_membership)
+        W += " (returning points with no clustering)"
+        warnings.warn(W)
+        return 1, np.ones_like(memberships)
+
+    # keep only cluster above min size
+    small_clusters = (unique_counts<min_membership)
+    big_clusters = ~small_clusters
+    kmeans.cluster_centers_ = kmeans.cluster_centers_[big_clusters]
+
+    W = "Removing {0} clusters with {1} particles ".format(
+                        np.sum(small_clusters),
+                        unique_counts[small_clusters])
+    warnings.warn(W)
+
+    K = np.sum(big_clusters)
+    memberships = kmeans.predict(X_std)
+
+    return K, memberships
+
+
 def Clustering(X,
                K=None,
                min_clusters=1, max_clusters=20,
+               min_membership=None,
                save_elbow_curve=None,
                elbow_tol=1.0):
     """
@@ -149,6 +202,10 @@ def Clustering(X,
     min_clusters, max_clusters: int
         if K is not provided then these instead give
         the range of the number of clusters to try
+    min_membership: int or None
+        the minimum number of points in a cluster
+        for example, if this is set to 5, then any clusters with 4 or
+        fewer members will
     save_elbow_curve: str
         if None, then do not produce the elbow curve plot, else
         this argument is the filname where plot is to be saved
@@ -160,12 +217,12 @@ def Clustering(X,
 
     RETURNS
     -------
-    result: dict with the following keys
-        num_clusters: int
-            the number of clusters used by KMeans
-        cluster_membership: array, shape=(n,)
-            for each particle, return an int identifying the cluster
-            to which it belongs
+    num_clusters: int
+        the number of clusters used by KMeans
+    cluster_membership: array, shape=(n,)
+        for each particle an int identifies the cluster to which it belongs
+    kmeans: K-Means
+        instance of sklearn K-Means clustering class
     """
     # check input has the correct shape
     assert X.ndim==2, "X.shape={} is not of form (n,p)".format(X.shape)
@@ -180,23 +237,20 @@ def Clustering(X,
                              elbow_tol=elbow_tol)
 
     # run KMeans clustering on the data
-    _, memberships = KMeans_clustering(X_std, K)
+    _, memberships, kmeans = KMeans_clustering(X_std, K)
+
+    # enforce minimum cluster membership size
+    if min_membership:
+        K, memberships = RemoveSmallClusters(X_std, kmeans, int(min_membership))
 
     return K, memberships
 
-
-if __name__=='__main__':
-
-    #
-    # THIS IS A UNIT TEST
-    #
-
-    # Generate some mock data points in a high number of dimensions
-    # from a Gaussian mixture model
-    from pomegranate import *
-
-    ndim = 4
-    nclusters = 10
+def main():
+    """
+    THIS IS A UNIT TEST
+    """
+    ndim = 5
+    nclusters = 4
     npoints = 1000
 
     component_dists = []
@@ -204,15 +258,18 @@ if __name__=='__main__':
         mean = np.random.uniform(-12, 12, size=ndim)
         cov = np.eye(ndim)
         component_dists.append(MultivariateGaussianDistribution(mean, cov))
+
     mixture_model = GeneralMixtureModel(component_dists,
-                                        weights=np.ones(nclusters)/nclusters)
+                                        weights=np.ones(nclusters))
 
     pts = mixture_model.sample(npoints)
 
+    pts = np.vstack((pts, 20*np.ones(ndim)))
+
     # Apply our clustering algorithm, searching for between 1 and 100 clusters
     # (take a look at the intertia plot saved in file test_elbow.png)
-    K, memberships = Clustering(pts, min_clusters=1, max_clusters=100,
-                    save_elbow_curve='test_elbow.png')
+    K, memberships = Clustering(pts, min_clusters=1, max_clusters=20,
+                    min_membership=10, save_elbow_curve='test_elbow.png')
 
     # Plot the data, color coded by the detected cluster membership
     # (take a look at the intertia plot saved in file test_clusters.png)
@@ -228,8 +285,8 @@ if __name__=='__main__':
             axes[ndim-row-1, col].set_xlabel("x"+str(col))
             axes[ndim-row-1, col].set_ylabel("x"+str(row))
 
-            axes[ndim-row-1, col].set_xlim(-13, 13)
-            axes[ndim-row-1, col].set_ylim(-13, 13)
+            axes[ndim-row-1, col].set_xlim(-21, 21)
+            axes[ndim-row-1, col].set_ylim(-21, 21)
 
     plt.tight_layout()
     plt.savefig("test_clusters.png")
@@ -237,4 +294,9 @@ if __name__=='__main__':
 
     # Ideally, we should find the same number of clusters as there
     # were components in out original Gaussian mixture model
-    print("cluster detected =", K, "of", nclusters)
+    print("clusters detected =", K, "of", nclusters)
+    print("cluster sizes =", np.unique(memberships, return_counts=True)[1])
+
+if __name__=='__main__':
+
+    main()
