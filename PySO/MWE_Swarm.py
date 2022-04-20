@@ -136,9 +136,8 @@ class MWE_Swarm(object):
             self.Periodic = list(Periodic)
 
         self.PeriodicParamRanges = np.array([
-                                            np.inf if self.Periodic[i]==1 else np.ptp(b)
+                                            np.inf if self.Periodic[i]==0 else np.ptp(b)
                                         for i, b in enumerate(self.Model.bounds)])
-
         self.BoundsArray = np.array(self.Model.bounds)
 
         # The velocity rule is the PSO standard rule
@@ -164,7 +163,7 @@ class MWE_Swarm(object):
         log_posterior: float
         """
         par_dict = dict(zip(self.Model.names, p))
-        return self.Model.log_posterior(par_dict)
+        return self.Model.log_likelihood(par_dict)
 
 
     def InitialiseSwarm(self):
@@ -238,8 +237,7 @@ class MWE_Swarm(object):
         Boundary conditions on the edge of the search region
         """
         # Periodic BCs
-        self.Points = self.BoundsArray[:,0] + (self.Points-self.BoundsArray[:,0]) % self.PeriodicParamRanges
-
+        # self.Points = self.BoundsArray[:,0] + (self.Points-self.BoundsArray[:,0]) % self.PeriodicParamRanges
         # Hard edges
         self.Points = np.clip(self.Points, self.BoundsArray[:,0], self.BoundsArray[:,1])
 

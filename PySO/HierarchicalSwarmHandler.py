@@ -154,7 +154,6 @@ class HierarchicalSwarmHandler(object):
     def InitialiseSwarms(self):
         """
         Initialise the swarm points, values and velocities
-        #TODO need to allow the user to pass in the initial positions, velocities and target functions
 
         """
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
@@ -200,6 +199,7 @@ class HierarchicalSwarmHandler(object):
                                in self.frozen_swarms.keys()])
         clustering_function_values = np.array([self.frozen_swarms[swarm_index].Values for swarm_index
                                in self.frozen_swarms.keys()])
+
 
         clustering_parameter_positions = np.concatenate(clustering_parameter_positions)
         clustering_function_values = np.concatenate(clustering_function_values)
@@ -252,12 +252,8 @@ class HierarchicalSwarmHandler(object):
 
         newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter+ 1],
                          num_particles,
-                         Verbose=False,
-                         # Final two args mean evolution is saved at every iteration. Only necessary if running current_swarm.Plot()
-                         SaveEvolution=False,  ############
-                         Tol=self.Swarm_kwargs['Tol'], Nthreads=self.Swarm_kwargs['Nthreads'],
                          Omega=self.Omegas[self.Hierarchical_model_counter+1], PhiP=self.PhiPs[self.Hierarchical_model_counter+1],
-                         PhiG=self.PhiGs[self.Hierarchical_model_counter+1], MaxIter=self.Maximum_number_of_iterations_per_step)
+                         PhiG=self.PhiGs[self.Hierarchical_model_counter+1], **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions
