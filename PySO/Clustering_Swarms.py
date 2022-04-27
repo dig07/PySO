@@ -185,7 +185,7 @@ def RemoveSmallClusters(X_std, kmeans, min_membership):
 
 def Clustering(X,
                K=None,
-               min_clusters=1, max_clusters=20,
+               min_clusters=1, max_clusters=40,
                min_membership=None,
                save_elbow_curve=None,
                elbow_tol=1.0):

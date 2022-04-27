@@ -420,8 +420,10 @@ class HierarchicalSwarmHandler(object):
         """
         Evaluate stall condition for a given swarm
         """
-        stalled = ((np.mean(Swarm.Spreads[-20:-10]) <= np.mean(Swarm.Spreads[-10:])) and
-         all(element == Swarm.FuncHistory[-20] for element in Swarm.FuncHistory[-20:]))
+        stalled = (((np.mean(Swarm.Spreads[-20:-10]) <= np.mean(Swarm.Spreads[-10:])) and
+         # all(element == Swarm.FuncHistory[-20] for element in Swarm.FuncHistory[-20:]))
+                   (np.abs(Swarm.FuncHistory[-1] - Swarm.FuncHistory[-20]) < 0.01*np.abs(Swarm.FuncHistory[-20]))) or
+                    (Swarm.EvolutionCounter >=  self.Maximum_number_of_iterations_per_step ))
         return stalled
 
 
