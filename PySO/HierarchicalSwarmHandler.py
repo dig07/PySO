@@ -2,6 +2,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from multiprocessing import Pool
+import warnings
 import copy
 
 from .Model import Model
@@ -30,7 +31,8 @@ class HierarchicalSwarmHandler(object):
                  Maximum_number_of_iterations_per_step=400,
                  Minimum_exploration_iterations = 50,
                  Initial_exploration_limit= 150,
-                 clustering_indices = None):
+                 clustering_indices = None,
+                 use_func_vals_in_clustering = False):
         """
 
         REQUIRED INPUTS
@@ -76,6 +78,8 @@ class HierarchicalSwarmHandler(object):
             Minimum number of iterations done in the very first step before stall condition evaluated
         clustering_indices: None or list of int
             Parameter position indexes to use for relabelling/clustering step
+        use_func_vals_in_clustering: boolean
+            Boolean flag for using function values for clustering or not [defaults to False]
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -132,6 +136,8 @@ class HierarchicalSwarmHandler(object):
         self.clustering_indices  = clustering_indices
         if self.clustering_indices == None: self.clustering_indices = np.arange(self.Ndim) # Use all parameters by default in clustering
 
+        self.use_func_vals_in_clustering = use_func_vals_in_clustering
+
         #Initialise swarms
         self.InitialiseSwarms()
 
@@ -159,6 +165,15 @@ class HierarchicalSwarmHandler(object):
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], PhiG= self.PhiGs[0], PhiP=self.PhiPs[0], **self.Swarm_kwargs)
                        for swarm_index in range(len(self.Swarm_names))}
+
+        stability_num = self.stability_check(self.Omegas[0],
+                                             self.PhiPs[0],
+                                             self.PhiGs[0])
+        print('Stability number:', stability_num)
+
+        if stability_num <= 0:
+            warnings.warn('Stability number is less than 0, initiated swarm is not guranteed to converge!')
+
         initial_best_positions = []
         initial_max_func_vals = []
 
@@ -195,19 +210,25 @@ class HierarchicalSwarmHandler(object):
         # Feature_array - Particle positions, function values, not all components (Specially not ones well measured)
         # Chirp mass, distance, sky position, effective spin, time to merger, function values
 
+        # # Dont want to converge to or explore peaks that are below a certain threshold compared to the best of the entire ensemble
+        # self.Veto_peaks()
+
         clustering_parameter_positions = np.array([np.take(self.frozen_swarms[swarm_index].Points,self.clustering_indices,axis=1) for swarm_index
                                in self.frozen_swarms.keys()])
-        clustering_function_values = np.array([self.frozen_swarms[swarm_index].Values for swarm_index
-                               in self.frozen_swarms.keys()])
-
 
         clustering_parameter_positions = np.concatenate(clustering_parameter_positions)
-        clustering_function_values = np.concatenate(clustering_function_values)
-
-        clustering_features = np.column_stack((clustering_parameter_positions, clustering_function_values))
 
 
-        K, memberships = Clustering(clustering_features, min_membership=10)
+        if self.use_func_vals_in_clustering == True:
+            clustering_function_values = np.array([self.frozen_swarms[swarm_index].Values for swarm_index
+                                                   in self.frozen_swarms.keys()])
+            clustering_function_values = np.concatenate(clustering_function_values)
+            clustering_features = np.column_stack((clustering_parameter_positions, clustering_function_values))
+        else:
+            clustering_features = clustering_parameter_positions
+
+
+        K, memberships = Clustering(clustering_features, min_membership=10,max_clusters=50)
 
 
         total_particle_positions = np.array([self.frozen_swarms[swarm_index].Points for swarm_index
@@ -218,6 +239,17 @@ class HierarchicalSwarmHandler(object):
         total_particle_velocities = np.concatenate(total_particle_velocities)
         total_particle_positions = np.concatenate(total_particle_positions)
 
+        print('Reinitiating swarms with Omega: ',self.Omegas[self.Hierarchical_model_counter+1],
+              ' PhiP: ',self.PhiPs[self.Hierarchical_model_counter+1],
+              ' PhiG: ',self.PhiGs[self.Hierarchical_model_counter+1])
+
+        stability_num = self.stability_check(self.Omegas[self.Hierarchical_model_counter+1],
+                                             self.PhiPs[self.Hierarchical_model_counter+1],
+                                             self.PhiGs[self.Hierarchical_model_counter+1])
+        print('Stability number:', stability_num)
+
+        if stability_num<=0:
+            warnings.warn('Stability number is less than 0, initiated swarm is not guranteed to converge!')
 
 
         for swarm_index in range(K):
@@ -230,6 +262,30 @@ class HierarchicalSwarmHandler(object):
         self.AllStalled = False
 
         self.Hierarchical_model_counter += 1
+
+    def stability_check(self, Omega, PhiP, PhiG):
+        """
+        Evaluate the stability number to diagnose if the swarm is diverging or converging.
+        Definition of stability number and explaination provided in https://bee22.com/resources/Bergh%202006.pdf (Page 85, Equation 3.21)
+                Omega > 1/2(PhiP + PhiG) − 1    (for guranteed convergence)
+
+        INPUTS:
+        ------
+        Omega: float
+            Inertia weight
+        PhiP: float
+            Personal/Cognitive weight
+        PhiG: float
+            Social weight
+
+        RETURNS:
+        ------
+        stability_number: float
+            Number defining the stability of the swarm being initiated
+        """
+
+        stability_number = Omega+1-1/2*(PhiP+PhiG)
+        return(stability_number)
 
     def Reinitiate_swarm(self,positions,velocities):
         """
