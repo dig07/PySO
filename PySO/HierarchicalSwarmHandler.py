@@ -228,7 +228,7 @@ class HierarchicalSwarmHandler(object):
             clustering_features = clustering_parameter_positions
 
 
-        K, memberships = Clustering(clustering_features, min_membership=10,max_clusters=50)
+        K, memberships = Clustering(clustering_features, min_membership=10,max_clusters=20)
 
 
         total_particle_positions = np.array([self.frozen_swarms[swarm_index].Points for swarm_index
