@@ -258,10 +258,6 @@ class MWE_Swarm(object):
         return ( self.Omega * self.Velocities
                + self.PhiP * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( self.BestKnownPoints - self.Points )
                + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points) )
-        # return ( self.Omega * self.Velocities
-        #        + self.PhiP * np.random.uniform(size=self.NumParticles).reshape((self.NumParticles,1)) * ( self.BestKnownPoints - self.Points )
-        #        + self.PhiG * np.random.uniform(size=self.NumParticles).reshape((self.NumParticles,1)) * ( best_known_swarm_point - self.Points) )
-
 
 
     def EvolveSwarm(self):

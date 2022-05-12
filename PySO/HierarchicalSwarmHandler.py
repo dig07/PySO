@@ -32,7 +32,8 @@ class HierarchicalSwarmHandler(object):
                  Minimum_exploration_iterations = 50,
                  Initial_exploration_limit= 150,
                  clustering_indices = None,
-                 use_func_vals_in_clustering = False):
+                 use_func_vals_in_clustering = False,
+                 kick_velocities = True):
         """
 
         REQUIRED INPUTS
@@ -80,6 +81,9 @@ class HierarchicalSwarmHandler(object):
             Parameter position indexes to use for relabelling/clustering step
         use_func_vals_in_clustering: boolean
             Boolean flag for using function values for clustering or not [defaults to False]
+        kick_velocities: boolean
+            Boolean flag for reinitialising velocities from position distribution
+            on clustering and segmenting [defaults to True]
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -137,6 +141,8 @@ class HierarchicalSwarmHandler(object):
         if self.clustering_indices == None: self.clustering_indices = np.arange(self.Ndim) # Use all parameters by default in clustering
 
         self.use_func_vals_in_clustering = use_func_vals_in_clustering
+
+        self.kick_velocities = kick_velocities
 
         #Initialise swarms
         self.InitialiseSwarms()
@@ -228,7 +234,7 @@ class HierarchicalSwarmHandler(object):
             clustering_features = clustering_parameter_positions
 
 
-        K, memberships = Clustering(clustering_features, min_membership=10,max_clusters=20)
+        K, memberships = Clustering(clustering_features, min_membership=10,max_clusters=70)
 
 
         total_particle_positions = np.array([self.frozen_swarms[swarm_index].Points for swarm_index
@@ -313,7 +319,19 @@ class HierarchicalSwarmHandler(object):
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions
-        newswarm.Velocities = velocities
+
+        if self.kick_velocities == True:
+            # Kick the reinitialised velocities
+            # Regenerate velocities from a normal distribution specified by the covariance of particles in swarm
+            vel_cov = np.cov(positions.T)
+
+            # Reinitialising velocities with a mean of zero (Shape of mean is 1D with length number of dimensions)
+            mean = np.zeros(positions.shape[1])
+
+            # Draw velocities from normal distribution specified by position
+            newswarm.Velocities = np.random.multivariate_normal(mean, vel_cov, size=num_particles)*0.1
+        else:
+            newswarm.Velocities = velocities
 
         newswarm.BestKnownPoints = copy.deepcopy(newswarm.Points)
 
