@@ -33,7 +33,9 @@ class HierarchicalSwarmHandler(object):
                  Initial_exploration_limit= 150,
                  clustering_indices = None,
                  use_func_vals_in_clustering = False,
-                 kick_velocities = True):
+                 kick_velocities = True,
+                 fitness_veto_fraction = 0.05,
+                 max_particles_per_swarm = None):
         """
 
         REQUIRED INPUTS
@@ -84,6 +86,10 @@ class HierarchicalSwarmHandler(object):
         kick_velocities: boolean
             Boolean flag for reinitialising velocities from position distribution
             on clustering and segmenting [defaults to True]
+        fitness_veto_fraction: float
+            Fraction of Best swarm position below which we throw away new swarms [defaults to 0.05]
+        max_particles_per_swarm: integer
+            Maximum number of particles per swarm [defaults to int(total_num_particles/10)]
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -143,6 +149,11 @@ class HierarchicalSwarmHandler(object):
         self.use_func_vals_in_clustering = use_func_vals_in_clustering
 
         self.kick_velocities = kick_velocities
+
+        self.fitness_veto_fraction = fitness_veto_fraction
+
+        self.max_particles_per_swarm = max_particles_per_swarm
+        if self.max_particles_per_swarm == None: self.max_particles_per_swarm = int(self.NumParticlesPerSwarm/10)
 
         #Initialise swarms
         self.InitialiseSwarms()
@@ -209,15 +220,67 @@ class HierarchicalSwarmHandler(object):
                 self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
                 self.BestCurrentSwarm = name
 
+    def veto_and_redistribute(self):
+        """
+
+        Veto peaks due to their function values being below the threshold (fraction of peak ensemble value) and
+        cap swarms for redistribution
+
+        RETURNS:
+        -------
+        num_particles_redistributed: int
+            Number of particles to be redistributed
+        """
+        num_particles_redistributed = 0
+
+        # lowest value of any particle in the entire ensemble (used in the insignificant peak veto below)
+        lowest_ensemble_val = np.min([np.min(self.frozen_swarms[swarm_index].Values) for swarm_index in list(self.frozen_swarms.keys())])
+
+        for swarm_index in list(self.frozen_swarms.keys()):
+            num_particles_in_swarm =  self.frozen_swarms[swarm_index].Points.shape[0]
+            # Check if the peak being explored is insignificant
+            if (self.frozen_swarms[swarm_index].BestKnownSwarmValue - lowest_ensemble_val) < self.fitness_veto_fraction*(self.BestKnownEnsembleValue-lowest_ensemble_val):
+                print('Swarm ',swarm_index,' below the fitness threshold, redistributing...')
+                # Remove it from the frozen swarms, just add up how many particles need to be redistributed
+                num_particles_redistributed += self.frozen_swarms[swarm_index].Points.shape[0]
+                self.frozen_swarms.pop(swarm_index)
+
+            elif num_particles_in_swarm > self.max_particles_per_swarm:
+
+                # Add up how many particles need to be redistributed
+                num_particles_redistributed += int(self.frozen_swarms[swarm_index].Points.shape[0] - self.max_particles_per_swarm)
+                # Find the lowest fitness particles
+                lowest_fitness_particle_indices = np.argsort(self.frozen_swarms[swarm_index].Values)[:(self.frozen_swarms[swarm_index].Points.shape[0] -
+                                                                                                       self.max_particles_per_swarm)]
+
+                # Remove those particles from the frozen swarms datastructure
+                self.frozen_swarms[swarm_index].Points = np.delete(self.frozen_swarms[swarm_index].Points,lowest_fitness_particle_indices,0)
+                self.frozen_swarms[swarm_index].Velocities = np.delete(self.frozen_swarms[swarm_index].Velocities,lowest_fitness_particle_indices,0)
+                self.frozen_swarms[swarm_index].Values = np.delete(self.frozen_swarms[swarm_index].Values,lowest_fitness_particle_indices,0)
+                self.frozen_swarms[swarm_index].BestKnownSwarmPoints = np.delete(self.frozen_swarms[swarm_index].BestKnownPoints,lowest_fitness_particle_indices,0)
+                self.frozen_swarms[swarm_index].BestKnownSwarmValue = np.delete(self.frozen_swarms[swarm_index].BestKnownValues,lowest_fitness_particle_indices,0)
+
+                # if current size is over 25 it will just get bigger once reclustering occurs probably
+
+                print('Swarm ',swarm_index, ' is over the maximum size per swarm, redistributing ',num_particles_in_swarm -
+                      self.max_particles_per_swarm,' Particles')
+
+        return(num_particles_redistributed)
+
+
+
     def Reallocate_particles(self):
         """Use all particles in current swarms, cluster them based on features and reallocate"""
+
+        # Dont want to converge to or explore peaks that are below a certain threshold compared to the best of the entire ensemble
+        # But dont want this redistribution to take place on the first "exploratory" swarm
+        if self.Hierarchical_model_counter != 0:
+            num_particles_redistributed = self.veto_and_redistribute()
 
         # Extract positions to be used for clustering, only using the indices of parameters that are well measured AND function value     #
         # Feature_array - Particle positions, function values, not all components (Specially not ones well measured)
         # Chirp mass, distance, sky position, effective spin, time to merger, function values
 
-        # # Dont want to converge to or explore peaks that are below a certain threshold compared to the best of the entire ensemble
-        # self.Veto_peaks()
 
         clustering_parameter_positions = np.array([np.take(self.frozen_swarms[swarm_index].Points,self.clustering_indices,axis=1) for swarm_index
                                in self.frozen_swarms.keys()])
@@ -264,6 +327,28 @@ class HierarchicalSwarmHandler(object):
               swarm_particle_velocities = total_particle_velocities[np.where(memberships == swarm_index)[0]]
               self.Swarms[swarm_index] = self.Reinitiate_swarm(swarm_particle_positions, swarm_particle_velocities)
 
+
+        if self.Hierarchical_model_counter != 0 and num_particles_redistributed>0:
+            # Redistribute particles from veto step above
+            parameter_positions = np.array(
+                [self.frozen_swarms[swarm_index].Points  for swarm_index
+                 in self.frozen_swarms.keys()])
+
+            parameter_positions = np.concatenate(parameter_positions)
+
+            # Distribute them using covariance matrix of current clusters
+            cov = np.cov(parameter_positions.T)
+            position_mean = np.mean(parameter_positions,axis=0)
+            velocity_mean = np.zeros(self.Ndim)
+
+            redistributed_particle_positions = np.random.multivariate_normal(position_mean, cov, size=num_particles_redistributed)
+            redistributed_particle_velocities = np.random.multivariate_normal(velocity_mean, cov, size=num_particles_redistributed)
+
+            # Extra redistributed swarm
+            self.Swarms[K] = self.Reinitiate_swarm(redistributed_particle_positions, redistributed_particle_velocities,
+                                                   Omega=self.Omegas[1],
+                                                   PhiP=self.PhiPs[1], # Set to parameters where each particle in this new swarm is doing personal only PSO
+                                                   PhiG=self.PhiGs[1])
         self.frozen_swarms = {}
         self.AllStalled = False
 
@@ -293,7 +378,10 @@ class HierarchicalSwarmHandler(object):
         stability_number = Omega+1-1/2*(PhiP+PhiG)
         return(stability_number)
 
-    def Reinitiate_swarm(self,positions,velocities):
+    def Reinitiate_swarm(self,positions,velocities,
+                         Omega=None,
+                         PhiP=None,
+                         PhiG=None):
         """
         Reinitiate swarm given some positions and velocities.
 
@@ -304,18 +392,30 @@ class HierarchicalSwarmHandler(object):
         velocities: array (number of particles, self.Ndim)
             initial velocities for new swarm particles
 
+        OPTIONAL INPUTS:
+        ------
+        Omega: float
+            Inertia parameter for new swarm [defaults to the hierarchical model list]
+        PhiP: float
+            Personal cognitive parameter for new swarm [defaults to the hierarchical model list]
+        PhiG: float
+            Group parameter for new swarm [defaults to the hierarchical model list]
+
+
         RETURNS:
         ------
         newswarm: swarm object
             new swarm initiated
         """
+        if (Omega is None) and (PhiP is None) and (PhiG is None):
+            Omega = self.Omegas[self.Hierarchical_model_counter + 1]
+            PhiP = self.PhiPs[self.Hierarchical_model_counter + 1]
+            PhiG = self.PhiGs[self.Hierarchical_model_counter + 1]
 
         num_particles = positions.shape[0]
 
-        newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter+ 1],
-                         num_particles,
-                         Omega=self.Omegas[self.Hierarchical_model_counter+1], PhiP=self.PhiPs[self.Hierarchical_model_counter+1],
-                         PhiG=self.PhiGs[self.Hierarchical_model_counter+1], **self.Swarm_kwargs)
+        newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter+ 1],num_particles,
+                         Omega=Omega, PhiP=PhiP, PhiG=PhiG, **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions
