@@ -28,7 +28,8 @@ class MWE_Swarm(object):
                  Output = './',
                  Resume = False,
                  Verbose = False,
-                 SaveEvolution = False):
+                 SaveEvolution = False,
+                 velocity_min = None):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -68,6 +69,7 @@ class MWE_Swarm(object):
             p1,p2... must be arrays of length Ndim whose entries correspond to Model.names
             or p1,p2... must be dicts with keys Model.names
 
+
         (Other parameters)
         Nthreads: int [defaults to 1]
             Number of multiprocessing threads to use.
@@ -82,7 +84,9 @@ class MWE_Swarm(object):
         Verbose: bool
             Verbosity [defaults to False]
         SaveEvolution: bool
-            save the entire evolution of the swarm [defaults to False] """
+            save the entire evolution of the swarm [defaults to False]
+        minimum_velocity: None or numpy array
+            (absolute) minimum velocity in every dimension, defaults to 1/100th of each dimension"""
 
         self.Ndim = len(Model.names)
 
@@ -141,6 +145,11 @@ class MWE_Swarm(object):
 
 
         self.BoundsArray = np.array(self.Model.bounds)
+
+        # Initialise default absolute velocities to 1/100th of the prior range specified in each parameter
+        #     NOTE: ptp by default positive
+        self.velocity_min = velocity_min
+        if self.velocity_min is None: self.velocity_min = np.ptp(self.BoundsArray,axis=1)/100
 
         # The velocity rule is the PSO standard rule
         self.VelocityRule = self.PSO_VelocityRule
@@ -243,21 +252,30 @@ class MWE_Swarm(object):
         # Hard edges
         self.Points = np.clip(self.Points, self.BoundsArray[:,0], self.BoundsArray[:,1])
 
-        # Smoothly window the normal components of velocities to zero at the boundary
-        # self.Velocities *= self.QuadraticWindow( (self.Points-self.BoundsArray[:,0])/np.ptp(self.BoundsArray) )
 
 
     def PSO_VelocityRule(self):
         """
         The PSO rule for updating the velocities
+
+        RETURN:
+        ------
+        clipped_velocities: numpy array
+            velocities clipped to the minimum velocity for each dimension
+
         """
         best_known_swarm_point = np.tile(
                               self.BestKnownSwarmPoint, self.NumParticles
                                   ).reshape((self.NumParticles, self.Ndim))
-
-        return ( self.Omega * self.Velocities
+        unclipped_velocities = (self.Omega * self.Velocities
                + self.PhiP * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( self.BestKnownPoints - self.Points )
-               + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points) )
+               + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points))
+
+        # Clip velocities by the minimum velocity for each dimension to avoid pointless exploration
+        #   Need to compare absolute velocities (why we have to do the np.sign business
+        clipped_velocities = np.sign(unclipped_velocities)*np.clip(np.abs(unclipped_velocities), a_min = self.velocity_min, a_max= None)
+
+        return (clipped_velocities)
 
 
     def EvolveSwarm(self):
