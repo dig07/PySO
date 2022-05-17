@@ -422,7 +422,7 @@ class HierarchicalSwarmHandler(object):
 
         if self.kick_velocities == True:
             # Kick the reinitialised velocities
-            # Regenerate velocities from a normal distribution specified by the covariance of particles in swarm
+            # Regenerate velocitvelocities from a normal distribution specified by the covariance of particles in swarm
             vel_cov = np.cov(positions.T)
 
             # Reinitialising velocities with a mean of zero (Shape of mean is 1D with length number of dimensions)
