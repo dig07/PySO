@@ -270,7 +270,7 @@ class MWE_Swarm(object):
                + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points))
 
         # Clip velocities by the minimum velocity for each dimension to avoid pointless exploration
-        #   Need to compare absolute velocities (why we have to do the np.sign business
+        #   Need to compare absolute velocities (why we have to do the np.sign business)
         clipped_velocities = np.sign(unclipped_velocities)*np.clip(np.abs(unclipped_velocities), a_min = self.velocity_min, a_max= None)
 
         return (clipped_velocities)

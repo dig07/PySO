@@ -539,6 +539,13 @@ class HierarchicalSwarmHandler(object):
         """
         Save the final results to file
         """
+        final_swarm_positions = np.concatenate([self.frozen_swarms[swarm_index].Points for swarm_index in list(self.frozen_swarms.keys())])
+        final_swarm_values = np.concatenate(np.array([self.frozen_swarms[swarm_index].Values for swarm_index in list(self.frozen_swarms.keys())]))
+        final_swarm_positions_filename = os.path.join(self.Output, "final_swarm_positions.txt")
+        final_swarm_values_filename = os.path.join(self.Output, "final_swarm_values.txt")
+
+        np.savetxt(final_swarm_positions_filename,final_swarm_positions)
+        np.savetxt(final_swarm_values_filename,final_swarm_values)
         pass
 
 
