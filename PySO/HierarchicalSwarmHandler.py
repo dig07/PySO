@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 import warnings
 import copy
+import dill as pickle
 
 from .Model import Model
 from PySO.Clustering_Swarms import Clustering
@@ -181,7 +182,7 @@ class HierarchicalSwarmHandler(object):
         """
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], PhiG= self.PhiGs[0], PhiP=self.PhiPs[0], **self.Swarm_kwargs)
-                       for swarm_index in range(len(self.Swarm_names))}
+                       for swarm_index in self.Swarm_names}
 
         stability_num = self.stability_check(self.Omegas[0],
                                              self.PhiPs[0],
@@ -543,9 +544,15 @@ class HierarchicalSwarmHandler(object):
         final_swarm_values = np.concatenate(np.array([self.frozen_swarms[swarm_index].Values for swarm_index in list(self.frozen_swarms.keys())]))
         final_swarm_positions_filename = os.path.join(self.Output, "final_swarm_positions.txt")
         final_swarm_values_filename = os.path.join(self.Output, "final_swarm_values.txt")
+        final_swarm_values_filename = os.path.join(self.Output, "final_swarm_values.txt")
 
         np.savetxt(final_swarm_positions_filename,final_swarm_positions)
         np.savetxt(final_swarm_values_filename,final_swarm_values)
+
+        final_swarm_pickle_filename= os.path.join(self.Output, "final_swarm_pickle.pkl")
+        # Dump final swarms into a pickle file
+        pickle.dump(self.frozen_swarms.copy(), open(final_swarm_pickle_filename, "wb"))
+
         pass
 
 

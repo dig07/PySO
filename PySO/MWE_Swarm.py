@@ -113,7 +113,7 @@ class MWE_Swarm(object):
         self.PhiG = PhiG
 
 
-        self.EvolutionCounter = np.nan
+        self.EvolutionCounter = 0
         self.MaxIter = MaxIter
 
         self.InitialGuess = InitialGuess
@@ -203,7 +203,7 @@ class MWE_Swarm(object):
                     self.Points[i][j] = np.random.uniform(Low, High)
 
                     Range = abs(High-Low)
-                    vLow, vHigh = -Range/10., Range/10. #FIDDLE PARAMETER HERE
+                    vLow, vHigh = -Range/5., Range/5. #FIDDLE PARAMETER HERE
                     self.Velocities[i][j] = np.random.uniform(vLow, vHigh)
 
             # If provided, overwrite first M positions with initial guesses
@@ -224,14 +224,14 @@ class MWE_Swarm(object):
             p.close()
 
             # Initialise each particle's best known position to initial position
-            self.BestKnownPoints = self.Points
-            self.BestKnownValues = self.Values
+            self.BestKnownPoints = self.Points.copy()
+            self.BestKnownValues = self.Values.copy()
 
 
             # Update the swarm's best known position
-            self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)]
+            self.BestKnownSwarmPoint = self.BestKnownPoints[np.argmax(self.BestKnownValues)]
 
-            self.BestKnownSwarmValue = np.max(self.Values)
+            self.BestKnownSwarmValue = np.max(self.BestKnownValues)
 
             # Calculate initial function value spread for switch condition
             self.Spreads.append(np.ptp(self.Values))
