@@ -36,7 +36,8 @@ class HierarchicalSwarmHandler(object):
                  use_func_vals_in_clustering = False,
                  kick_velocities = True,
                  fitness_veto_fraction = 0.05,
-                 max_particles_per_swarm = None):
+                 max_particles_per_swarm = None,
+                 redraw_velocities_at_segmentation = False):
         """
 
         REQUIRED INPUTS
@@ -91,6 +92,8 @@ class HierarchicalSwarmHandler(object):
             Fraction of Best swarm position below which we throw away new swarms [defaults to 0.05]
         max_particles_per_swarm: integer
             Maximum number of particles per swarm [defaults to int(total_num_particles/10)]
+        redraw_velocities_at_segmentation: Boolean
+            Boolean flag indicating if the velocities should be redrawn from swarm position ranges at each segmentation step [defaults to False]
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -150,6 +153,8 @@ class HierarchicalSwarmHandler(object):
         self.use_func_vals_in_clustering = use_func_vals_in_clustering
 
         self.kick_velocities = kick_velocities
+
+        self.redraw_velocities_at_segmentation = redraw_velocities_at_segmentation
 
         self.fitness_veto_fraction = fitness_veto_fraction
 
@@ -346,10 +351,7 @@ class HierarchicalSwarmHandler(object):
             redistributed_particle_velocities = np.random.multivariate_normal(velocity_mean, cov, size=num_particles_redistributed)
 
             # Extra redistributed swarm
-            self.Swarms[K] = self.Reinitiate_swarm(redistributed_particle_positions, redistributed_particle_velocities,
-                                                   Omega=self.Omegas[1],
-                                                   PhiP=self.PhiPs[1], # Set to parameters where each particle in this new swarm is doing personal only PSO
-                                                   PhiG=self.PhiGs[1])
+            self.Swarms[K] = self.Reinitiate_swarm(redistributed_particle_positions, redistributed_particle_velocities)
         self.frozen_swarms = {}
         self.AllStalled = False
 
@@ -421,18 +423,24 @@ class HierarchicalSwarmHandler(object):
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions
 
-        if self.kick_velocities == True:
+        if self.kick_velocities == True: #and self.Hierarchical_model_counter>0.5*len(self.Hierarchical_models):
             # Kick the reinitialised velocities
-            # Regenerate velocitvelocities from a normal distribution specified by the covariance of particles in swarm
+            # Regenerate velocities from a normal distribution specified by the covariance of particles in swarm
             vel_cov = np.cov(positions.T)
 
             # Reinitialising velocities with a mean of zero (Shape of mean is 1D with length number of dimensions)
             mean = np.zeros(positions.shape[1])
 
             # Draw velocities from normal distribution specified by position
-            newswarm.Velocities = np.random.multivariate_normal(mean, vel_cov, size=num_particles)*0.1
+            newswarm.Velocities = np.random.multivariate_normal(mean, vel_cov, size=num_particles)
         else:
             newswarm.Velocities = velocities
+
+        if self.redraw_velocities_at_segmentation == True:
+
+            ptp_vel_bounds = np.ptp(np.array([np.min(positions,axis=0),np.max(positions,axis=0)]).T,axis=1)
+
+            newswarm.Velocities = (ptp_vel_bounds) * np.random.random_sample(size=(num_particles,self.Ndim)) - ptp_vel_bounds/2
 
         newswarm.BestKnownPoints = copy.deepcopy(newswarm.Points)
 
