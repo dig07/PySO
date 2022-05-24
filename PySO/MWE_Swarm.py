@@ -305,9 +305,9 @@ class MWE_Swarm(object):
         self.BestKnownValues = new_best_known_values
 
         # Update swarm's best known position
-        if np.max(self.BestKnownValues) > self.BestKnownSwarmValue:
-            self.BestKnownSwarmPoint = self.BestKnownPoints[np.argmax(self.BestKnownValues)]
-            self.BestKnownSwarmValue = np.max(self.BestKnownValues)
+        if np.max(self.Values) > self.BestKnownSwarmValue:
+            self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)]
+            self.BestKnownSwarmValue = np.max(self.Values)
 
 
         # Append spreads
