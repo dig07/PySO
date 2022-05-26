@@ -249,8 +249,17 @@ class MWE_Swarm(object):
         """
         # Periodic BCs
         self.Points = self.BoundsArray[:,0] + np.fmod(self.Points-self.BoundsArray[:,0],self.PeriodicParamRanges)
+
         # Hard edges
-        self.Points = np.clip(self.Points, a_min=self.BoundsArray[:,0], a_max=self.BoundsArray[:,1])
+        clipped_points = np.clip(self.Points, a_min=self.BoundsArray[:,0], a_max=self.BoundsArray[:,1])
+
+        # Reflective boundary velocities
+        velocity_reflection_indices = np.where(clipped_points != self.Points)
+
+        self.Points = clipped_points
+
+        for particle,param_index in zip(velocity_reflection_indices[0],velocity_reflection_indices[1]):
+            self.Velocities[particle,param_index] *= -1
 
     def PSO_VelocityRule(self):
         """
@@ -306,8 +315,8 @@ class MWE_Swarm(object):
 
         # Update swarm's best known position
         if np.max(self.Values) > self.BestKnownSwarmValue:
-            self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)]
-            self.BestKnownSwarmValue = np.max(self.Values)
+            self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)].copy()
+            self.BestKnownSwarmValue = np.max(self.Values).copy()
 
 
         # Append spreads
