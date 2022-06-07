@@ -21,6 +21,7 @@ class HierarchicalSwarmHandler(object):
                  Omega = 0.6,
                  PhiP = 0.2,
                  PhiG = 0.2,
+                 MH_fraction = 0.0,
                  Swarm_kwargs={},
                  Output = './',
                  nPeriodicCheckpoint = 10,
@@ -58,6 +59,8 @@ class HierarchicalSwarmHandler(object):
             the phi_p parameter for each hierarhical model, cognitive coefficient for velocity updating [defaults to .2]
         PhiG: float or list
             the phi_g parameter for each hierarhical model, social coefficient for velocity updating [defaults to .2]
+        MH_fraction: float:
+            parameter controlling proportion of velocity rule dictated by MCMC, for each hierarchical model [defaults to 0.]
         Swarm_kwargs: dict,
             dictionary of common arguments between all swarms
         Output: str
@@ -102,11 +105,13 @@ class HierarchicalSwarmHandler(object):
         self.Omegas = Omega
         self.PhiPs = PhiP
         self.PhiGs = PhiG
+        self.MH_fractions = MH_fraction
 
         if type(self.Omegas) == float:
             self.Omegas = [self.Omegas] * len(self.Hierarchical_models)
             self.PhiPs = [self.PhiPs] * len(self.Hierarchical_models)
             self.PhiGs = [self.PhiGs] * len(self.Hierarchical_models)
+            self.MH_fractions = [self.MH_fractions] * len(self.Hierarchical_models)
         else:
             assert len(self.Omegas) == len(self.Hierarchical_models), "Please ensure your PSO parameter lists correspond to the correct number of hierarchical steps "
 
@@ -186,7 +191,8 @@ class HierarchicalSwarmHandler(object):
 
         """
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
-                                                            Omega=self.Omegas[0], PhiG= self.PhiGs[0], PhiP=self.PhiPs[0], **self.Swarm_kwargs)
+                                                            Omega=self.Omegas[0], PhiG= self.PhiGs[0], PhiP=self.PhiPs[0], MH_fraction=self.MH_fractions[0],
+                                                            **self.Swarm_kwargs)
                        for swarm_index in self.Swarm_names}
 
         stability_num = self.stability_check(self.Omegas[0],
@@ -280,7 +286,8 @@ class HierarchicalSwarmHandler(object):
 
         # Dont want to converge to or explore peaks that are below a certain threshold compared to the best of the entire ensemble
         # But dont want this redistribution to take place on the first "exploratory" swarm
-        if self.Hierarchical_model_counter != 0:
+        # Also dont want to redistribute if we are mostly doing MH MCMC velocity rule, as we dont expect strong clustering there
+        if self.Hierarchical_model_counter != 0 and self.MH_fractions[self.Hierarchical_model_counter]< 0.1:
             num_particles_redistributed = self.veto_and_redistribute()
 
         # Extract positions to be used for clustering, only using the indices of parameters that are well measured AND function value     #
@@ -414,11 +421,12 @@ class HierarchicalSwarmHandler(object):
             Omega = self.Omegas[self.Hierarchical_model_counter + 1]
             PhiP = self.PhiPs[self.Hierarchical_model_counter + 1]
             PhiG = self.PhiGs[self.Hierarchical_model_counter + 1]
+            MH_fraction = self.MH_fractions[self.Hierarchical_model_counter + 1]
 
         num_particles = positions.shape[0]
 
         newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter+ 1],num_particles,
-                         Omega=Omega, PhiP=PhiP, PhiG=PhiG, **self.Swarm_kwargs)
+                         Omega=Omega, PhiP=PhiP, PhiG=PhiG, MH_fraction=MH_fraction , **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions

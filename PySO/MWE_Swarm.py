@@ -18,6 +18,7 @@ class MWE_Swarm(object):
                  Omega = 0.6,        # PSO rule parameter
                  PhiP = 0.2,         # PSO rule parameter
                  PhiG = 0.2,        # PSO rule parameter
+                 MH_fraction= 0.0,
                  Tol = 1.0e-3,
                  MaxIter = 1.0e6,
                  Periodic = None,
@@ -29,7 +30,8 @@ class MWE_Swarm(object):
                  Resume = False,
                  Verbose = False,
                  SaveEvolution = False,
-                 velocity_min = None):
+                 velocity_min = None,
+                 ProposalCov = None):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -54,6 +56,8 @@ class MWE_Swarm(object):
             the phi_p parameter, cognitive coefficient for velocity updating [defaults to .2]
         PhiG: float
             the phi_g parameter, social coefficient for velocity updating [defaults to .2]
+        MH_fraction: float:
+            parameter controlling proportion of velocity rule dictated by MCMC [defaults to 0.]
         Tol: float
             the tol on the function value between, this is the spread in function values below which
             we consider the optimization algoritm to have converged [defaults to 1.0e-3]
@@ -86,7 +90,9 @@ class MWE_Swarm(object):
         SaveEvolution: bool
             save the entire evolution of the swarm [defaults to False]
         velocity_min: None or numpy array
-            (absolute) minimum velocity in every dimension, defaults to 1/100th of each dimension"""
+            (absolute) minimum velocity in every dimension, defaults to 1/100th of each dimension
+        ProposalCov: numpy array
+            Covariance matrix for gaussian proposal distribution for MH part of velocity rule [defaults to identity]"""
 
         self.Ndim = len(Model.names)
 
@@ -111,7 +117,12 @@ class MWE_Swarm(object):
         self.PhiP = PhiP
 
         self.PhiG = PhiG
+        self.MH_fraction = MH_fraction
 
+        if ProposalCov is None:
+            self.ProposalCov = np.identity(self.Ndim)
+        else:
+            self.ProposalCov = ProposalCov
 
         self.EvolutionCounter = 0
         self.MaxIter = MaxIter
@@ -151,8 +162,17 @@ class MWE_Swarm(object):
         self.velocity_min = velocity_min
         if self.velocity_min is None: self.velocity_min = np.ptp(self.BoundsArray,axis=1)/100
 
-        # The velocity rule is the PSO standard rule
-        self.VelocityRule = self.PSO_VelocityRule
+        if ProposalCov is None:
+            self.ProposalCov = np.identity(self.Ndim)
+        else:
+            self.ProposalCov = ProposalCov
+
+        if self.MH_fraction == 0:
+            # The velocity rule is the PSO standard rule when no MH
+            self.VelocityRule = self.PSO_VelocityRule
+        else:
+            self.VelocityRule = self.Hybrid_VelocityRule
+
 
         # Only used for hierarchical PSO searches
         self.Hierarchical_step = 0
@@ -284,6 +304,53 @@ class MWE_Swarm(object):
 
         return (clipped_velocities)
 
+    def Hybrid_VelocityRule(self):
+        """
+        The PSO rule for updating the velocities including a MH MCMC part to it
+
+        RETURN:
+        ------
+        clipped_velocities: numpy array
+            velocities clipped to the minimum velocity for each dimension
+
+        """
+
+
+
+        MH_velocities = np.zeros((self.NumParticles,self.Ndim))
+
+        for particle_index in range(self.NumParticles):
+            # Draw from proposal distribution
+            draw = np.random.multivariate_normal(self.Points[particle_index], self.ProposalCov, 1)[0]
+
+            # Need to clip the draws at the boundary - wont cause any big problems for posterior distribution
+            draw = np.clip(draw, self.BoundsArray[:, 0], self.BoundsArray[:, 1])
+
+            # Note log ratio
+            alpha = np.exp(self.MyFunc(draw)-self.MyFunc(self.Points[particle_index]))
+
+            if np.random.uniform(0,1,1) <= alpha :
+                MH_velocities[particle_index] = draw - self.Points[particle_index]
+            else:
+                MH_velocities[particle_index] = np.zeros(self.Ndim)
+
+
+        best_known_swarm_point = np.tile(
+            self.BestKnownSwarmPoint, self.NumParticles
+        ).reshape((self.NumParticles, self.Ndim))
+
+        unclipped_velocities = (self.Omega * self.Velocities
+                                + self.PhiP * np.random.uniform(size=(self.NumParticles, self.Ndim)) * (
+                                            self.BestKnownPoints - self.Points)
+                                + self.PhiG * np.random.uniform(size=(self.NumParticles, self.Ndim)) * (
+                                            best_known_swarm_point - self.Points) + self.MH_fraction * MH_velocities)
+
+        # Clip velocities by the minimum velocity for each dimension to avoid pointless exploration
+        #   Need to compare absolute velocities (why we have to do the np.sign business)
+        clipped_velocities = np.sign(unclipped_velocities) * np.clip(np.abs(unclipped_velocities),
+                                                                     a_min=self.velocity_min, a_max=None)
+
+        return (clipped_velocities)
 
     def EvolveSwarm(self):
         """
