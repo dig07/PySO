@@ -85,7 +85,7 @@ class MWE_Swarm(object):
             Verbosity [defaults to False]
         SaveEvolution: bool
             save the entire evolution of the swarm [defaults to False]
-        minimum_velocity: None or numpy array
+        velocity_min: None or numpy array
             (absolute) minimum velocity in every dimension, defaults to 1/100th of each dimension"""
 
         self.Ndim = len(Model.names)
