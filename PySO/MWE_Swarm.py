@@ -274,6 +274,8 @@ class MWE_Swarm(object):
         clipped_points = np.clip(self.Points, a_min=self.BoundsArray[:,0], a_max=self.BoundsArray[:,1])
 
         # Reflective boundary velocities
+        # This does mess with the MH MCMC part of the velocity rule, so proposals near prior boundary in the case MH_fraction=1.0 will be affected
+
         velocity_reflection_indices = np.where(clipped_points != self.Points)
 
         self.Points = clipped_points
@@ -507,21 +509,6 @@ class MWE_Swarm(object):
         outfile = os.path.join(self.Output, "FunctionValues.png")
         plt.savefig(outfile)
         plt.clf()
-        #
-        #
-        # # Trajectory for each pair of params
-        # for j, name_x in enumerate(self.Model.names):
-        #     for name_y in self.Model.names[j+1:]:
-        #         plt.figure()
-        #         for i in range(self.NumParticles):
-        #             traj = np.array(swarm_points[i::self.NumParticles])
-        #             plt.plot(traj[:,1+self.Model.names.index(name_x)], traj[:,1+self.Model.names.index(name_y)],
-        #                      '-', marker='o', markersize=3, color=palette[i], alpha=0.5)
-        #         plt.xlabel(name_x)
-        #         plt.ylabel(name_y)
-        #         outfile = os.path.join(self.Output, "EvolutionTrajectory_{0}_{1}.png".format(name_x, name_y))
-        #         plt.savefig(outfile)
-        #         plt.clf()
 
 
     def Run(self, segmenting=False):
