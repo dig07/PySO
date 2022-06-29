@@ -5,7 +5,7 @@ from multiprocessing import Pool
 
 
 from .Model import Model
-from .MWE_Swarm import MWE_Swarm as Swarm
+from .MWE_Swarm import Swarm as Swarm
 
 
 

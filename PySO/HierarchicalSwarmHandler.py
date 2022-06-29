@@ -8,7 +8,7 @@ import dill as pickle
 
 from .Model import Model
 from PySO.Clustering_Swarms import Clustering
-from .MWE_Swarm import MWE_Swarm as Swarm
+from .MWE_Swarm import Swarm as Swarm
 
 
 

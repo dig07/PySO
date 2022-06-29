@@ -10,7 +10,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
-class MWE_Swarm(object):
+class Swarm(object):
 
     def __init__(self,
                  Model,
@@ -194,7 +194,8 @@ class MWE_Swarm(object):
         log_posterior: float
         """
         par_dict = dict(zip(self.Model.names, p))
-        return self.Model.log_likelihood(par_dict)
+        log_posterior = self.Model.log_likelihood(par_dict)
+        return log_posterior
 
 
     def InitialiseSwarm(self):
@@ -275,7 +276,6 @@ class MWE_Swarm(object):
 
         # Reflective boundary velocities
         # This does mess with the MH MCMC part of the velocity rule, so proposals near prior boundary in the case MH_fraction=1.0 will be affected
-
         velocity_reflection_indices = np.where(clipped_points != self.Points)
 
         self.Points = clipped_points
@@ -285,7 +285,7 @@ class MWE_Swarm(object):
 
     def PSO_VelocityRule(self):
         """
-        The PSO rule for updating the velocities
+        The standard PSO rule for updating the velocities
 
         RETURN:
         ------
