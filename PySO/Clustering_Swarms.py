@@ -12,8 +12,6 @@ from scipy.interpolate import interp1d
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
-from pomegranate import *
-
 
 def Standardize(X):
     """

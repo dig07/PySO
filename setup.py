@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="EnsembleParticleSwarmOptimization",
-    version="0.0.1",
+    version="0.0.15",
     author="Christopher Moore and Diganta Bandopadhyay",
     author_email="diganta@star.sr.bham.ac.uk",
     description="Ensemble of particle swarms together with various velocity rules for function optimization",
@@ -14,7 +14,7 @@ setuptools.setup(
     url="https://github.com/dig07/PySO",
     packages=setuptools.find_packages(),
     python_requires='>=3',
-    install_requires=['numpy>=1.15.0', 'scipy', 'pandas', 'matplotlib','scikit-learn','pomegranate','seaborn','pathos','dill','kneed'],
+    install_requires=['numpy>=1.15.0', 'scipy', 'pandas', 'matplotlib','scikit-learn','seaborn','pathos','dill','kneed'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
