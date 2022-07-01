@@ -1,5 +1,6 @@
 import numpy as np
-from multiprocessing import Pool
+# from multiprocessing import Pool#
+from pathos.multiprocessing import ProcessingPool as Pool
 import os
 import pickle
 import seaborn as sns
@@ -16,22 +17,23 @@ class Swarm(object):
                  Model,
                  NumParticles,
                  Omega = 0.6,        # PSO rule parameter
-                 PhiP = 0.2,         # PSO rule parameter
-                 PhiG = 0.2,        # PSO rule parameter
-                 MH_fraction= 0.0,
+                 Phip = 0.2,         # PSO rule parameter
+                 Phig = 0.2,        # PSO rule parameter
+                 Mh_fraction= 0.0,
                  Tol = 1.0e-3,
-                 MaxIter = 1.0e6,
+                 Maxiter = 1.0e6,
                  Periodic = None,
-                 InitialGuess = None,
+                 Initialguess = None,
                  Nthreads = 1,
                  Seed = None,
-                 nPeriodicCheckpoint = 10,
+                 Nperiodiccheckpoint = 10,
                  Output = './',
                  Resume = False,
                  Verbose = False,
-                 SaveEvolution = False,
-                 velocity_min = None,
-                 ProposalCov = None):
+                 Saveevolution = False,
+                 Velocity_min = None,
+                 Velocity_minimum_factor = 100,
+                 Proposalcov = None):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -52,21 +54,21 @@ class Swarm(object):
         (Algorithm parameters)
         Omega: float
             the omega parameter, inertial coefficient for velocity updating [defaults to .6]
-        PhiP: float
+        Phip: float
             the phi_p parameter, cognitive coefficient for velocity updating [defaults to .2]
-        PhiG: float
+        Phig: float
             the phi_g parameter, social coefficient for velocity updating [defaults to .2]
-        MH_fraction: float:
+        Mh_fraction: float:
             parameter controlling proportion of velocity rule dictated by MCMC [defaults to 0.]
         Tol: float
             the tol on the function value between, this is the spread in function values below which
             we consider the optimization algoritm to have converged [defaults to 1.0e-3]
-        MaxIter: int
+        Maxiter: int
             the maximum number of evolution iterations [defaults to 1.0e6]
         Periodic: list [defaults to None]
             In which dimensions to use periodic boundary conditions. E.g. [0,1,0,...,0] means periodic in dimension 1 only.
             If None, then use all zeros.
-        InitialGuess: list of arrays or dicts
+        Initialguess: list of arrays or dicts
             optionally provide initial guess(es) [defaults to None]
             list structure [p1, p2, ..., pm]
             the first m swarm points will start at these locations
@@ -79,7 +81,7 @@ class Swarm(object):
             Number of multiprocessing threads to use.
         Seed: int
             random Seed [defaults to None]
-        nPeriodicCheckpoint: int
+        Nperiodiccheckpoint: int
             number of iterations between checkpoints [defaults to 10]
         Output: str
             folder in which to save output [defaults to './']
@@ -87,11 +89,14 @@ class Swarm(object):
             look for resume pkl file on startup and checkpoint during run [defaults to False]
         Verbose: bool
             Verbosity [defaults to False]
-        SaveEvolution: bool
+        Saveevolution: bool
             save the entire evolution of the swarm [defaults to False]
-        velocity_min: None or numpy array
+        Velocity_min: None or numpy array
             (absolute) minimum velocity in every dimension, defaults to 1/100th of each dimension
-        ProposalCov: numpy array
+        Velocity_minimum_factor: int or float
+            Set absolute minimum speed to 1/velocity_minimum_factor of the prior range specified in each parameter,
+             Only relevant of velocity min array not provided by user [defaults to 100]
+        Proposalcov: numpy array
             Covariance matrix for gaussian proposal distribution for MH part of velocity rule [defaults to identity]"""
 
         self.Ndim = len(Model.names)
@@ -114,24 +119,23 @@ class Swarm(object):
         self.Tol = Tol
 
         self.Omega = Omega
-        self.PhiP = PhiP
+        self.PhiP = Phip
+        self.PhiG = Phig
+        self.MH_fraction = Mh_fraction
 
-        self.PhiG = PhiG
-        self.MH_fraction = MH_fraction
-
-        if ProposalCov is None:
+        if Proposalcov is None:
             self.ProposalCov = np.identity(self.Ndim)
         else:
-            self.ProposalCov = ProposalCov
+            self.ProposalCov = Proposalcov
 
         self.EvolutionCounter = 0
-        self.MaxIter = MaxIter
+        self.MaxIter = Maxiter
 
-        self.InitialGuess = InitialGuess
+        self.InitialGuess = Initialguess
 
         self.Seed = Seed
 
-        self.nPeriodicCheckpoint = nPeriodicCheckpoint
+        self.nPeriodicCheckpoint = Nperiodiccheckpoint
 
         self.Output = Output
 
@@ -140,7 +144,7 @@ class Swarm(object):
 
         self.Verbose = Verbose
 
-        self.SaveEvolution = SaveEvolution
+        self.SaveEvolution = Saveevolution
 
         self.Nthreads = Nthreads
 
@@ -157,15 +161,12 @@ class Swarm(object):
 
         self.BoundsArray = np.array(self.Model.bounds)
 
-        # Initialise default absolute velocities to 1/100th of the prior range specified in each parameter
         #     NOTE: ptp by default positive
-        self.velocity_min = velocity_min
-        if self.velocity_min is None: self.velocity_min = np.ptp(self.BoundsArray,axis=1)/100
+        self.velocity_min = Velocity_min
+        self.velocity_minimum_factor = Velocity_minimum_factor
 
-        if ProposalCov is None:
-            self.ProposalCov = np.identity(self.Ndim)
-        else:
-            self.ProposalCov = ProposalCov
+        if self.velocity_min is None:
+            self.velocity_min = np.ptp(self.BoundsArray,axis=1)/self.velocity_minimum_factor
 
         if self.MH_fraction == 0:
             # The velocity rule is the PSO standard rule when no MH
@@ -239,10 +240,10 @@ class Swarm(object):
                         self.Points[i] = np.array([ self.InitialGuess[i][name] for name in self.Model.names ])
 
             # Initialise the particle function values
-            p = Pool(self.Nthreads)
-            self.Values = np.array( p.map(self.MyFunc, self.Points) )
+            self.Pool = Pool(self.Nthreads)
+            self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
 
-            p.close()
+            # p.close()
 
             # Initialise each particle's best known position to initial position
             self.BestKnownPoints = self.Points.copy()
@@ -369,11 +370,8 @@ class Swarm(object):
         # Enforce point to be within bounds
         self.EnforceBoundaries()
 
-        # Update function values
-        p = Pool(self.Nthreads)
-        self.Values = np.array( p.map(self.MyFunc, self.Points) )
-        p.close()
-        p.join()
+        # # Update function values
+        self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
 
 
         # Update particle's best known position
