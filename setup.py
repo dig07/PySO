@@ -4,14 +4,14 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="PySO",
+    name="EnsembleParticleSwarmOptimization",
     version="0.0.1",
     author="Christopher Moore and Diganta Bandopadhyay",
-    author_email="cmoore@star.sr.bham.ac.uk",
-    description="Python PSO",
+    author_email="diganta@star.sr.bham.ac.uk",
+    description="Ensemble of particle swarms together with various velocity rules for function optimization",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/cjm96/PySO",
+    url="https://github.com/dig07/PySO",
     packages=setuptools.find_packages(),
     classifiers=[
         "Programming Language :: Python :: 3",
