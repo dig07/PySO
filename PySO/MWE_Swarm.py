@@ -440,6 +440,14 @@ class Swarm(object):
         file1.write(output_str)
         file1.close()
 
+        results_dictionary = {}
+        results_dictionary['Labels'] = self.Model.names
+        results_dictionary['Max Value'] = self.BestKnownSwarmValue
+        results_dictionary['Best point'] = self.BestKnownSwarmPoint
+        results_dictionary['Covariance matrix'] = np.cov(self.Points.T)
+        results_dictionary['Uncertainties'] = np.sqrt(np.diag(np.cov(self.Points.T)))
+        results_dictionary_file = os.path.join(self.Output, "Results.npz")
+        np.savez(results_dictionary_file, **results_dictionary)
 
 
     def ContinueCondition(self):
