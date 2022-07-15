@@ -1,6 +1,6 @@
 import numpy as np
-# from multiprocessing import Pool#
 from pathos.multiprocessing import ProcessingPool as Pool
+# from multiprocessing_on_dill import Pool
 import os
 import pickle
 import seaborn as sns
@@ -33,7 +33,8 @@ class Swarm(object):
                  Saveevolution = False,
                  Velocity_min = None,
                  Velocity_minimum_factor = 100,
-                 Proposalcov = None):
+                 Proposalcov = None,
+                 Initial_guess_v_factor = 3):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -97,7 +98,9 @@ class Swarm(object):
             Set absolute minimum speed to 1/velocity_minimum_factor of the prior range specified in each parameter,
              Only relevant of velocity min array not provided by user [defaults to 100]
         Proposalcov: numpy array
-            Covariance matrix for gaussian proposal distribution for MH part of velocity rule [defaults to identity]"""
+            Covariance matrix for gaussian proposal distribution for MH part of velocity rule [defaults to identity]
+        Initial_guess_v_factor: float/int
+            Fiddle factor used to multiply initial guess spreads to initialise velocities [defaults to 3]"""
 
         self.Ndim = len(Model.names)
 
@@ -117,6 +120,8 @@ class Swarm(object):
         self.Velocities = np.zeros( (NumParticles, self.Ndim) )
 
         self.Tol = Tol
+
+        self.initial_guess_v_factor = Initial_guess_v_factor
 
         self.Omega = Omega
         self.PhiP = Phip
@@ -238,17 +243,21 @@ class Swarm(object):
                         self.Points[i] = self.InitialGuess[i]
                     elif isinstance(self.InitialGuess[i], (dict)):
                         self.Points[i] = np.array([ self.InitialGuess[i][name] for name in self.Model.names ])
+                # If initial guess provided, velocities drawn from spread of initial distribution
+                # Spread in each parameter positions
+                Spread = np.std(self.Points,axis=0)
+                for i in range(self.Ndim):
+                    # For each dimension, initialise velocities consistent with the scale of the distribution provided
+                    vLow, vHigh = -Spread[i]/2, Spread[i]/2 #FIDDLE PARAMETER HERE
+                    self.Velocities[:,i] = self.initial_guess_v_factor*np.random.uniform(vLow,vHigh,self.NumParticles)
 
             # Initialise the particle function values
             self.Pool = Pool(self.Nthreads)
             self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
 
-            # p.close()
-
             # Initialise each particle's best known position to initial position
             self.BestKnownPoints = self.Points.copy()
             self.BestKnownValues = self.Values.copy()
-
 
             # Update the swarm's best known position
             self.BestKnownSwarmPoint = self.BestKnownPoints[np.argmax(self.BestKnownValues)]
@@ -280,9 +289,6 @@ class Swarm(object):
         velocity_reflection_indices = np.where(clipped_points != self.Points)
 
         self.Points = clipped_points
-
-        for particle,param_index in zip(velocity_reflection_indices[0],velocity_reflection_indices[1]):
-            self.Velocities[particle,param_index] *= -1
 
     def PSO_VelocityRule(self):
         """
@@ -420,7 +426,6 @@ class Swarm(object):
         output_str += "at {0}, ".format(self.BestKnownSwarmPoint)
         output_str += "Spread: {0}".format(np.ptp(self.Values))
         print(output_str)
-
 
     def SaveFinalResults(self):
         """
