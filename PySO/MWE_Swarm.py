@@ -244,12 +244,9 @@ class Swarm(object):
                     elif isinstance(self.InitialGuess[i], (dict)):
                         self.Points[i] = np.array([ self.InitialGuess[i][name] for name in self.Model.names ])
                 # If initial guess provided, velocities drawn from spread of initial distribution
-                # Spread in each parameter positions
-                Spread = np.std(self.Points,axis=0)
-                for i in range(self.Ndim):
-                    # For each dimension, initialise velocities consistent with the scale of the distribution provided
-                    vLow, vHigh = -Spread[i]/2, Spread[i]/2 #FIDDLE PARAMETER HERE
-                    self.Velocities[:,i] = self.initial_guess_v_factor*np.random.uniform(vLow,vHigh,self.NumParticles)
+                # Spread in velocities according to the normal distribution specified by the covariance of initial positions
+                cov = np.cov(self.Points.T)
+                self.Velocities = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.NumParticles)*self.initial_guess_v_factor/np.sqrt(self.Ndim)
 
             # Initialise the particle function values
             self.Pool = Pool(self.Nthreads)
@@ -289,6 +286,9 @@ class Swarm(object):
         velocity_reflection_indices = np.where(clipped_points != self.Points)
 
         self.Points = clipped_points
+
+        for particle,param_index in zip(velocity_reflection_indices[0],velocity_reflection_indices[1]):
+            self.Velocities[particle,param_index] *= -1
 
     def PSO_VelocityRule(self):
         """
@@ -460,7 +460,7 @@ class Swarm(object):
         When continue condition ceases to be satisfied the evolution stops
         """
         spread = np.ptp(self.Values)
-        return ( spread>self.Tol  and  self.EvolutionCounter<self.MaxIter )
+        return (self.EvolutionCounter<self.MaxIter )
 
 
     def CreateEvolutionHistoryFile(self):
@@ -521,6 +521,19 @@ class Swarm(object):
         plt.savefig(outfile)
         plt.clf()
 
+        # Trajectory for each pair of params
+        for j, name_x in enumerate(self.Model.names):
+            for name_y in self.Model.names[j+1:]:
+                plt.figure()
+                for i in range(self.NumParticles):
+                    traj = np.array(swarm_points[i::self.NumParticles])
+                    plt.plot(traj[:,1+self.Model.names.index(name_x)], traj[:,1+self.Model.names.index(name_y)],
+                             '-', marker='o', markersize=3, color=palette[i], alpha=0.5)
+                plt.xlabel(name_x)
+                plt.ylabel(name_y)
+                outfile = os.path.join(self.Output, "EvolutionTrajectory_{0}_{1}.png".format(name_x, name_y))
+                plt.savefig(outfile)
+                plt.clf()
 
     def Run(self, segmenting=False):
         """
@@ -531,7 +544,6 @@ class Swarm(object):
             flag to indicate if we are transferring likelihoods
         """
         if segmenting==False: self.InitialiseSwarm()
-
         if self.SaveEvolution and self.EvolutionCounter==0:
             self.CreateEvolutionHistoryFile()
             self.SaveSwarmEvolution()
