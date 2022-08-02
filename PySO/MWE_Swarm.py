@@ -20,6 +20,7 @@ class Swarm(object):
                  Phip = 0.2,         # PSO rule parameter
                  Phig = 0.2,        # PSO rule parameter
                  Mh_fraction= 0.0,
+                 Jitter_weight = 0.0,
                  Tol = 1.0e-3,
                  Maxiter = 1.0e6,
                  Periodic = None,
@@ -34,7 +35,11 @@ class Swarm(object):
                  Velocity_min = None,
                  Velocity_minimum_factor = 100,
                  Proposalcov = None,
-                 Initial_guess_v_factor = 3):
+                 Initial_guess_v_factor = 3,
+                 Clip_lower_velocity = True,
+                 Clip_upper_velocity = True,
+                 Delta_max = 0.3,
+                 Delta_min = 0.0001    ):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -59,8 +64,11 @@ class Swarm(object):
             the phi_p parameter, cognitive coefficient for velocity updating [defaults to .2]
         Phig: float
             the phi_g parameter, social coefficient for velocity updating [defaults to .2]
-        Mh_fraction: float:
+        Mh_fraction: float
             parameter controlling proportion of velocity rule dictated by MCMC [defaults to 0.]
+        Jitter_weight: float
+            parameter that controls the movement of velocities to point towards a random particle in the swarm [defaults to 0.]
+             (used to get particle out of local maxima they are stuck in)
         Tol: float
             the tol on the function value between, this is the spread in function values below which
             we consider the optimization algoritm to have converged [defaults to 1.0e-3]
@@ -100,7 +108,16 @@ class Swarm(object):
         Proposalcov: numpy array
             Covariance matrix for gaussian proposal distribution for MH part of velocity rule [defaults to identity]
         Initial_guess_v_factor: float/int
-            Fiddle factor used to multiply initial guess spreads to initialise velocities [defaults to 3]"""
+            Fiddle factor used to multiply initial guess spreads to initialise velocities [defaults to 3]
+        Clip_lower_velocity: boolean
+            Flag for if velocity should be clipped (rescaled) on the lower end preserving direction of travel [defaults to True]
+        Clip_upper_velocity: boolean
+            Flag for if velocity should be clipped (rescaled) on the upper end preserving direction of travel [defaults to True]
+        Delta_max: float
+            fiddle parameter used to control maximum magnitude of velocity vector [defaults to 0.3]
+        Delta_min: float
+            fiddle parameter used to control minimum mangitude of velocity vector [defaults to 0.0001]
+        """
 
         self.Ndim = len(Model.names)
 
@@ -127,6 +144,8 @@ class Swarm(object):
         self.PhiP = Phip
         self.PhiG = Phig
         self.MH_fraction = Mh_fraction
+        self.Jitter_weight  = Jitter_weight
+
 
         if Proposalcov is None:
             self.ProposalCov = np.identity(self.Ndim)
@@ -170,8 +189,16 @@ class Swarm(object):
         self.velocity_min = Velocity_min
         self.velocity_minimum_factor = Velocity_minimum_factor
 
-        if self.velocity_min is None:
-            self.velocity_min = np.ptp(self.BoundsArray,axis=1)/self.velocity_minimum_factor
+
+        self.delta_max = Delta_max
+        self.delta_min = Delta_min
+
+        self.velocity_max = self.delta_max*np.linalg.norm(np.ptp(self.BoundsArray,axis=1))
+        self.velocity_min = self.delta_min*np.linalg.norm(np.ptp(self.BoundsArray,axis=1))
+
+        self.clip_lower_velocity = Clip_lower_velocity
+        self.clip_upper_velocity = Clip_upper_velocity
+
 
         if self.MH_fraction == 0:
             # The velocity rule is the PSO standard rule when no MH
@@ -247,6 +274,8 @@ class Swarm(object):
                 # Spread in velocities according to the normal distribution specified by the covariance of initial positions
                 cov = np.cov(self.Points.T)
                 self.Velocities = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.NumParticles)*self.initial_guess_v_factor/np.sqrt(self.Ndim)
+                self.velocity_max = self.delta_max * np.linalg.norm(np.ptp(self.Points, axis=0))
+                self.velocity_min = self.delta_min * np.linalg.norm(np.ptp(self.Points, axis=0))
 
             # Initialise the particle function values
             self.Pool = Pool(self.Nthreads)
@@ -292,7 +321,8 @@ class Swarm(object):
 
     def PSO_VelocityRule(self):
         """
-        The standard PSO rule for updating the velocities
+        The standard PSO rule for updating the velocities with a jitter component added to reduce the chance of a particle
+        stuck in a local maxima
 
         RETURN:
         ------
@@ -305,14 +335,63 @@ class Swarm(object):
                                   ).reshape((self.NumParticles, self.Ndim))
         unclipped_velocities = (self.Omega * self.Velocities
                + self.PhiP * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( self.BestKnownPoints - self.Points )
-               + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points))
-
-        # Clip velocities by the minimum velocity for each dimension to avoid pointless exploration
-        #   Need to compare absolute velocities (why we have to do the np.sign business)
-        clipped_velocities = np.sign(unclipped_velocities)*np.clip(np.abs(unclipped_velocities), a_min = self.velocity_min, a_max= None)
+               + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points)
+               # line "jitters" each particle towards another random particle in the swarm to prevent being stuck in local maxima
+               + self.Jitter_weight * np.random.uniform(size=(self.NumParticles,self.Ndim)) * (self.Points[np.random.randint(self.NumParticles,size=self.NumParticles)]-
+                                                                                               self.Points))
+        clipped_velocities = self.clip_velocities(unclipped_velocities)
 
         return (clipped_velocities)
 
+    def clip_velocities(self,unclipped_velocities):
+        """
+        Clip velocities (on the upper  and lower end) by magnitude preserving particle directions.
+        (See https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8280887)
+
+        INPUT:
+        ----------
+        unclipped_velocities: ndarray (#Num_particles,#Ndim)
+            PSO velocities unclipped
+
+        RETURN:
+        -------
+        clipped_velocities: ndarray (#Num_particles,#Ndim)
+            PSO velocities clipped
+        """
+        # Calculate velocity magnitudes for each particle
+        velocity_magnitudes_uncliped = np.linalg.norm(np.abs(unclipped_velocities),axis=1)
+
+        # Clip manitudes by maximum mangitudes and minimum and detect particles where cliping was applied
+        # Seperate the lower and upper edge clipping
+        #    //TODO: probably can clean this up into one expression but not urgent
+        velocity_magnitudes_clipped_upper= np.clip(velocity_magnitudes_uncliped, a_min = None, a_max=self.velocity_max)
+        velocity_clipping_indices_upper = np.where(velocity_magnitudes_uncliped != velocity_magnitudes_clipped_upper)[0]
+
+        velocity_magnitudes_clipped_lower= np.clip(velocity_magnitudes_uncliped, a_min = self.velocity_min, a_max= None)
+        velocity_clipping_indices_lower = np.where(velocity_magnitudes_uncliped != velocity_magnitudes_clipped_lower)[0]
+
+        # Clipped velocities will be of the same shape as unclipped velocities
+        clipped_velocities = unclipped_velocities.copy()
+
+        # Check if any clipping occurs and reasign clipped velocities appropriately
+        if (velocity_clipping_indices_upper.size != 0) and self.clip_upper_velocity == True:
+            # Repeat magnitudes across all components of velocity for division
+            #      [[ v_particle_1_mag, v_particle_1_mag, .... v_particle_1_mag],
+            #        [v_particle_2_mag, v_particle_2_mag, .... v_particle_2_mag]...]
+            # As all dimensions divided by same dimension
+            # v magnitudes for each particle that needs to be clipped across all dimensions
+            magnitudes_reshaped_upper = np.repeat(velocity_magnitudes_uncliped[velocity_clipping_indices_upper][:,np.newaxis],repeats=self.Ndim, axis=1)
+
+            clipped_velocities[velocity_clipping_indices_upper] = unclipped_velocities[velocity_clipping_indices_upper]/magnitudes_reshaped_upper * self.velocity_max
+
+        # Same thing but for lower edge
+        if (velocity_clipping_indices_lower.size != 0) and self.clip_lower_velocity == True:
+
+            magnitudes_reshaped_lower = np.repeat(velocity_magnitudes_uncliped[velocity_clipping_indices_lower][:,np.newaxis],repeats=self.Ndim, axis=1)
+            clipped_velocities[velocity_clipping_indices_lower] = unclipped_velocities[velocity_clipping_indices_lower]/magnitudes_reshaped_lower * self.velocity_min
+
+
+        return(clipped_velocities)
     def Hybrid_VelocityRule(self):
         """
         The PSO rule for updating the velocities including a MH MCMC part to it
