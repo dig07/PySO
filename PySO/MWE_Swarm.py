@@ -39,7 +39,8 @@ class Swarm(object):
                  Clip_lower_velocity = True,
                  Clip_upper_velocity = True,
                  Delta_max = 0.3,
-                 Delta_min = 0.0001    ):
+                 Delta_min = 0.0001,
+                 Velocity_clipping_or_rescale= 'Clip'):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -114,9 +115,13 @@ class Swarm(object):
         Clip_upper_velocity: boolean
             Flag for if velocity should be clipped (rescaled) on the upper end preserving direction of travel [defaults to True]
         Delta_max: float
-            fiddle parameter used to control maximum magnitude of velocity vector [defaults to 0.3]
+            fiddle parameter used to control maximum magnitude of velocity vector [defaults to 0.3] [Only used if velocity rescaling enabled]
         Delta_min: float
-            fiddle parameter used to control minimum mangitude of velocity vector [defaults to 0.0001]
+            fiddle parameter used to control minimum mangitude of velocity vector [defaults to 0.0001] [Only used if velocity rescaling enabled]
+        Velocity_clipping_or_rescale: str, either 'Clip' or 'Rescale'
+            flag used to choose prescription for clamping velocities, either clip velocities to some minimum velocity in each dimension, or
+             rescale to some minimum and or maximum velocity magnitudes.
+
         """
 
         self.Ndim = len(Model.names)
@@ -186,18 +191,26 @@ class Swarm(object):
         self.BoundsArray = np.array(self.Model.bounds)
 
         #     NOTE: ptp by default positive
-        self.velocity_min = Velocity_min
-        self.velocity_minimum_factor = Velocity_minimum_factor
 
 
-        self.delta_max = Delta_max
-        self.delta_min = Delta_min
+        if Velocity_clipping_or_rescale == 'Clip':
+            self.velocity_clipping_function = self.velocity_clipping
+            self.velocity_minimum_factor = Velocity_minimum_factor
+            self.velocity_min = Velocity_min
+            if self.velocity_min == None:
+                self.velocity_min = np.ptp(self.BoundsArray, axis=1) / self.velocity_minimum_factor
 
-        self.velocity_max = self.delta_max*np.linalg.norm(np.ptp(self.BoundsArray,axis=1))
-        self.velocity_min = self.delta_min*np.linalg.norm(np.ptp(self.BoundsArray,axis=1))
+        elif Velocity_clipping_or_rescale == 'Rescale':
 
-        self.clip_lower_velocity = Clip_lower_velocity
-        self.clip_upper_velocity = Clip_upper_velocity
+            self.velocity_clipping_function = self.rescale_velocities
+            self.delta_max = Delta_max
+            self.delta_min = Delta_min
+            self.velocity_max = self.delta_max*np.linalg.norm(np.ptp(self.BoundsArray,axis=1))
+            self.velocity_min = self.delta_min*np.linalg.norm(np.ptp(self.BoundsArray,axis=1))
+            self.clip_lower_velocity = Clip_lower_velocity
+            self.clip_upper_velocity = Clip_upper_velocity
+
+
 
 
         if self.MH_fraction == 0:
@@ -274,8 +287,14 @@ class Swarm(object):
                 # Spread in velocities according to the normal distribution specified by the covariance of initial positions
                 cov = np.cov(self.Points.T)
                 self.Velocities = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.NumParticles)*self.initial_guess_v_factor/np.sqrt(self.Ndim)
-                self.velocity_max = self.delta_max * np.linalg.norm(np.ptp(self.Points, axis=0))
-                self.velocity_min = self.delta_min * np.linalg.norm(np.ptp(self.Points, axis=0))
+
+                if self.velocity_clipping_function == self.rescale_velocities:
+                    # set up velocity rescaling bounds from initial distribution if using the rescaling
+                    self.velocity_max = self.delta_max * np.linalg.norm(np.ptp(self.Points, axis=0))
+                    self.velocity_min = self.delta_min * np.linalg.norm(np.ptp(self.Points, axis=0))
+                elif self.velocity_clipping_function == self.velocity_clipping:
+                    # set up minimum velocity bounds using initial distribution if using the rescaling
+                    self.velocity_min = np.ptp(self.Points, axis=0) / self.velocity_minimum_factor
 
             # Initialise the particle function values
             self.Pool = Pool(self.Nthreads)
@@ -339,13 +358,31 @@ class Swarm(object):
                # line "jitters" each particle towards another random particle in the swarm to prevent being stuck in local maxima
                + self.Jitter_weight * np.random.uniform(size=(self.NumParticles,self.Ndim)) * (self.Points[np.random.randint(self.NumParticles,size=self.NumParticles)]-
                                                                                                self.Points))
-        clipped_velocities = self.clip_velocities(unclipped_velocities)
-
+        clipped_velocities = self.velocity_clipping_function(unclipped_velocities)
         return (clipped_velocities)
 
-    def clip_velocities(self,unclipped_velocities):
+    def velocity_clipping(self,unclipped_velocities):
         """
-        Clip velocities (on the upper  and lower end) by magnitude preserving particle directions.
+        Clip the velocities only at the lower end, an alternative to velocity rescaling method
+
+        Use this method in problems where you REALLY dont want the velocity for 1 or more parameters to be too small as this
+            is possible with the resclaing method
+        INPUT:
+        ----------
+        unclipped_velocities: ndarray (#Num_particles,#Ndim)
+            PSO velocities unclipped
+
+        RETURN:
+        -------
+        clipped_velocities: ndarray (#Num_particles,#Ndim)
+            PSO velocities clipped
+        """
+        clipped_velocities = np.sign(unclipped_velocities)*np.clip(np.abs(unclipped_velocities), a_min = self.velocity_min, a_max= None)
+        return(clipped_velocities)
+
+    def rescale_velocities(self,unclipped_velocities):
+        """
+        Rescale velocities (on the upper  and lower end) by magnitude preserving particle directions.
         (See https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=8280887)
 
         INPUT:
@@ -356,7 +393,7 @@ class Swarm(object):
         RETURN:
         -------
         clipped_velocities: ndarray (#Num_particles,#Ndim)
-            PSO velocities clipped
+            PSO velocities rescaled
         """
         # Calculate velocity magnitudes for each particle
         velocity_magnitudes_uncliped = np.linalg.norm(np.abs(unclipped_velocities),axis=1)
@@ -370,6 +407,7 @@ class Swarm(object):
         velocity_magnitudes_clipped_lower= np.clip(velocity_magnitudes_uncliped, a_min = self.velocity_min, a_max= None)
         velocity_clipping_indices_lower = np.where(velocity_magnitudes_uncliped != velocity_magnitudes_clipped_lower)[0]
 
+        print('Number of velocity magnitudes rescaled (lower,upper): ',(velocity_clipping_indices_lower.size,velocity_clipping_indices_upper.size))
         # Clipped velocities will be of the same shape as unclipped velocities
         clipped_velocities = unclipped_velocities.copy()
 
