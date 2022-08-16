@@ -1,7 +1,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from multiprocessing import Pool
+from pathos.multiprocessing import ProcessingPool as Pool
 import warnings
 import copy
 import dill as pickle
@@ -191,7 +191,7 @@ class HierarchicalSwarmHandler(object):
 
         """
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
-                                                            Omega=self.Omegas[0], PhiG= self.PhiGs[0], PhiP=self.PhiPs[0], MH_fraction=self.MH_fractions[0],
+                                                            Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
                                                             **self.Swarm_kwargs)
                        for swarm_index in self.Swarm_names}
 
@@ -426,7 +426,7 @@ class HierarchicalSwarmHandler(object):
         num_particles = positions.shape[0]
 
         newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter+ 1],num_particles,
-                         Omega=Omega, PhiP=PhiP, PhiG=PhiG, MH_fraction=MH_fraction , **self.Swarm_kwargs)
+                         Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction , **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions
@@ -450,6 +450,7 @@ class HierarchicalSwarmHandler(object):
 
             newswarm.Velocities = (ptp_vel_bounds) * np.random.random_sample(size=(num_particles,self.Ndim)) - ptp_vel_bounds/2
 
+
         newswarm.BestKnownPoints = copy.deepcopy(newswarm.Points)
 
         # Recalculate best personal known values:
@@ -461,6 +462,9 @@ class HierarchicalSwarmHandler(object):
 
         newswarm.BestKnownSwarmPoint = newswarm.BestKnownPoints[np.argmax(newswarm.BestKnownValues)]
         newswarm.BestKnownSwarmValue = np.max(newswarm.BestKnownValues)
+
+        # Sets up multiprocessing pool for parallel function computations
+        newswarm.Pool = Pool(self.Swarm_kwargs['Nthreads'])
 
         return (newswarm)
 
