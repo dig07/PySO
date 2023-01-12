@@ -7,7 +7,6 @@ import seaborn as sns
 from .Model import Model
 
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 
@@ -40,7 +39,8 @@ class Swarm(object):
                  Clip_upper_velocity = True,
                  Delta_max = 0.3,
                  Delta_min = 0.0001,
-                 Velocity_clipping_or_rescale= 'Clip'):
+                 Velocity_clipping_or_rescale= 'Clip',
+                 Reinitialise_velocities_from_initial_guess=True):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -121,7 +121,8 @@ class Swarm(object):
         Velocity_clipping_or_rescale: str, either 'Clip' or 'Rescale'
             flag used to choose prescription for clamping velocities, either clip velocities to some minimum velocity in each dimension, or
              rescale to some minimum and or maximum velocity magnitudes.
-
+        Reinitialise_velocities_from_initial_guess: boolean
+            Wether to reinitialise velocities from initial guess (or if false, initialise from v_min array provided by user) [defaults to True]
         """
 
         self.Ndim = len(Model.names)
@@ -210,7 +211,8 @@ class Swarm(object):
             self.clip_lower_velocity = Clip_lower_velocity
             self.clip_upper_velocity = Clip_upper_velocity
 
-
+        #Wether to reinitialise velocities from initial guess or from v_min array provided by user
+        self.reinitialise_velocities_from_initial_guess = Reinitialise_velocities_from_initial_guess
 
 
         if self.MH_fraction == 0:
@@ -288,13 +290,17 @@ class Swarm(object):
                 cov = np.cov(self.Points.T)
                 self.Velocities = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.NumParticles)*self.initial_guess_v_factor/np.sqrt(self.Ndim)
 
-                if self.velocity_clipping_function == self.rescale_velocities:
-                    # set up velocity rescaling bounds from initial distribution if using the rescaling
-                    self.velocity_max = self.delta_max * np.linalg.norm(np.ptp(self.Points, axis=0))
-                    self.velocity_min = self.delta_min * np.linalg.norm(np.ptp(self.Points, axis=0))
-                elif self.velocity_clipping_function == self.velocity_clipping:
-                    # set up minimum velocity bounds using initial distribution if using the rescaling
-                    self.velocity_min = np.ptp(self.Points, axis=0) / self.velocity_minimum_factor
+                if self.reinitialise_velocities_from_initial_guess = True:
+                    if self.velocity_clipping_function == self.rescale_velocities:
+                        # set up velocity rescaling bounds from initial distribution if using the rescaling
+                        self.velocity_max = self.delta_max * np.linalg.norm(np.ptp(self.Points, axis=0))
+                        self.velocity_min = self.delta_min * np.linalg.norm(np.ptp(self.Points, axis=0))
+                    elif self.velocity_clipping_function == self.velocity_clipping:
+                        # set up minimum velocity bounds using initial distribution if using the rescaling
+                        self.velocity_min = np.ptp(self.Points, axis=0) / self.velocity_minimum_factor
+                else:
+                    # v_min already set in init method, above lines overwrite if set to initialise velocities from initial guess.
+                    pass
 
             # Initialise the particle function values
             self.Pool = Pool(self.Nthreads)

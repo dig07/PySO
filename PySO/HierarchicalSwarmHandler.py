@@ -468,7 +468,300 @@ class HierarchicalSwarmHandler(object):
 
         return (newswarm)
 
+    import numpy as np
 
+    import matplotlib.pyplot as plt
+
+    from matplotlib.pyplot import pause, draw
+
+    from matplotlib import colors
+
+    from scipy.optimize import curve_fit
+
+     
+
+    fig = plt.figure()
+
+    ax = fig.gca()
+
+     
+
+    size = 50
+
+    board = np.round_(np.random.uniform(size=(size, size)))
+
+    # board = np.ones((size, size))
+
+    colors_list = ['black', 'green', 'red']
+
+    cmap = colors.ListedColormap(colors_list)
+
+    board_image = ax.imshow(board, cmap=cmap)
+
+    # setting the probabilities
+
+    p = 0.01
+
+    f = 0.001
+
+    repeat = 20
+
+    # only show inner boarders for grid
+
+     
+
+    list_nr_trees = []
+
+    list_nr_empty = []
+
+    all_areas = []
+
+     
+
+    for _ in range(repeat):
+
+       
+
+        new = board
+
+    nr_trees = 0
+
+    nr_empty = 0
+
+    # print('initial board: ', board)
+
+ 
+
+for j in range(size - 1):
+
+    for i in range(size - 1):
+
+           
+
+              # check f# check if empty, prob. grow tree
+
+if board[i, j] == 0 and np.random.rand() <= p:
+    new[i, j] = 1
+
+             
+
+              # if cell has tree, prob. fire
+
+if board[i, j] == 1 and np.random.rand() <= f:
+    new[i, j] = 2  # or fire and spread
+
+                
+
+              # if fire, spread it
+
+if board[i, j] == 2:
+    new[i, j] = 0
+
+               
+
+                
+
+                  # get rid of all of these and try and set a condition
+
+# if fire at the edges, set to 0 and leave it there.
+
+                
+
+                if i - 1 <= 0:
+
+    new[i - 1, j] = 0
+
+elif j - 1 <= 0:
+
+    new[i, j - 1] = 0
+
+elif i + 1 >= size:
+
+    new[i + 1, j] = 0
+
+elif j + 1 >= size:
+
+    new[i, j + 1] = 0
+
+               
+
+                 else:
+
+                      # sometimes the fire jumps and there are too many lit up ==> check the else conditions
+
+if new[i - 1, j] == 1:
+    new[i - 1, j] = 2
+
+if new[i, j - 1] == 1:
+    new[i, j - 1] = 2
+
+if new[i + 1, j] == 1:
+    new[i + 1, j] = 2
+
+if new[i, j + 1] == 1:
+    new[i, j + 1] = 2
+
+ 
+
+# trying to keep track of the number of trees vs empty spaces
+
+nr_trees = nr_trees + (new[i, j] == 1)
+
+nr_empty = nr_empty + (new[i, j] == 0)
+
+ 
+
+# making the graph to see how nr of empty spaces and trees will balance out
+
+    list_nr_trees = np.append(list_nr_trees, nr_trees)
+
+list_nr_empty = np.append(list_nr_empty, nr_empty)
+
+   
+
+      # Kopelman Algorithm
+
+    largest_label = 0
+
+label = np.zeros((size, size))
+
+   
+
+    for i in range(size):  # row
+
+    for j in range(size):  # column
+
+        if board[i, j] == 1:
+
+            left = label[i, j - 1]
+
+            above = label[i - 1, j]
+
+            if left == 0 and above == 0:
+                largest_label = largest_label + 1
+
+                label[i, j] = largest_label
+
+   
+
+                 elif left != 0 and above == 0:
+
+label[i, j] = left
+
+   
+
+                 elif left == 0 and above != 0:
+
+label[i, j] = above
+
+   
+
+                 else:
+
+# if both above and left are occupied, take up the label from above
+
+label[i, j] = above
+
+# let's give the coordinates of left then, to change in the 'label' matrix
+
+label[i, j - 1] = above
+
+# change all labels from the left to equal inital one from above
+
+label = np.where(label == left, above, label)
+
+'''for x in range(size):
+
+    for y in range(size):
+
+        label[x, y] = np.where(label[x, y] == left, above, label[x, y])'''
+
+   
+
+      # print('after kopelman: ', label)
+
+   
+
+      # counting the areas of each cluster
+
+areas = []
+
+for n in range(size):
+
+    a = 0 
+
+            for i in range(size):
+
+        for j in range(size):  # iterating over each element in the matrix
+
+            if label[i, j] == (n + 1):
+                a = a + 1
+
+    areas = np.append(areas, a)
+
+    areas = np.delete(areas, np.where(areas == 0))
+
+       
+
+        all_areas = np.append(all_areas, areas)  # keeping track of areas even through multiple repeats
+
+           
+
+     
+
+    # substitute the board with the new matrix
+
+    board = new 
+
+        
+
+        
+
+        image = ax.imshow(board, cmap=cmap)
+
+    pause(0.1)
+
+       
+
+        
+
+    # print(all_areas)
+
+     
+
+    def power_law(x, a, b):
+
+        return a * x ** b
+
+     
+
+    x = np.arange(1, np.max(all_areas), 1)
+
+    # y = plt.hist(all_areas, bins = x)
+
+     
+
+    popt, pcov = curve_fit(power_law, x[:-1], y[0])
+
+    # plt.plot(x, power_law(x, *popt))
+
+       
+
+    # plotting the nr of trees / empty cells
+
+    '''
+
+x = np.arange(0, repeat)
+
+plt.figure()
+
+plt.plot(x, list_nr_trees)
+
+plt.plot(x, list_nr_empty)
+
+plt.show()
+
+'''
 
 
 
@@ -617,6 +910,9 @@ class HierarchicalSwarmHandler(object):
                 if self.Hierarchical_model_counter+1 == len(self.Hierarchical_models):
                     print('\n All swarms stalled on the last model, finishing up!')
                     self.swarm_stepping_done = True
+                    for swarm in self.Swarms:
+                        swarm.Pool.close()
+                        swarm.Pool.join()
 
                 else:
                     print('\n All swarms stalled! Switching segments from ', str(self.Hierarchical_models[self.Hierarchical_model_counter].segment_number),
