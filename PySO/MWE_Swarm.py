@@ -290,7 +290,7 @@ class Swarm(object):
                 cov = np.cov(self.Points.T)
                 self.Velocities = np.random.multivariate_normal(np.zeros(self.Ndim), cov, size=self.NumParticles)*self.initial_guess_v_factor/np.sqrt(self.Ndim)
 
-                if self.reinitialise_velocities_from_initial_guess = True:
+                if self.reinitialise_velocities_from_initial_guess == True:
                     if self.velocity_clipping_function == self.rescale_velocities:
                         # set up velocity rescaling bounds from initial distribution if using the rescaling
                         self.velocity_max = self.delta_max * np.linalg.norm(np.ptp(self.Points, axis=0))
