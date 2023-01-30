@@ -21,6 +21,8 @@ class Swarm(object):
                  Mh_fraction= 0.0,
                  Jitter_weight = 0.0,
                  Tol = 1.0e-3,
+                 Automatic_convergence_testing = False,
+                 Convergence_testing_num_iterations = 50,
                  Maxiter = 1.0e6,
                  Periodic = None,
                  Initialguess = None,
@@ -71,8 +73,11 @@ class Swarm(object):
             parameter that controls the movement of velocities to point towards a random particle in the swarm [defaults to 0.]
              (used to get particle out of local maxima they are stuck in)
         Tol: float
-            the tol on the function value between, this is the spread in function values below which
-            we consider the optimization algoritm to have converged [defaults to 1.0e-3]
+            the minimum improvement on functionvalue that we class as "still converging"
+        Automatic_convergence_testing: boolean
+            Flag toggling convergence testing to terminate swarm evolution [defaults to False]
+        Convergence_testing_num_iterations: int
+            If best swarm point has not improved over this many last iterations (improved past Tol) [defaults to 50]
         Maxiter: int
             the maximum number of evolution iterations [defaults to 1.0e6]
         Periodic: list [defaults to None]
@@ -143,6 +148,7 @@ class Swarm(object):
         self.Velocities = np.zeros( (NumParticles, self.Ndim) )
 
         self.Tol = Tol
+        self.Convergence_testing_num_iterations = Convergence_testing_num_iterations
 
         self.initial_guess_v_factor = Initial_guess_v_factor
 
@@ -226,6 +232,11 @@ class Swarm(object):
         self.Hierarchical_step = 0
         self.Spreads = []
         self.FuncHistory = []
+
+        if Automatic_convergence_testing == True:
+            self.ContinueCondition = self.ContinueCondition_Hybrid
+        else:
+            self.ContinueCondition = self.ContinueCondition_Vanilla
 
     def MyFunc(self, p):
         """
@@ -578,13 +589,31 @@ class Swarm(object):
         np.savez(results_dictionary_file, **results_dictionary)
 
 
-    def ContinueCondition(self):
+    def ContinueCondition_Vanilla(self):
         """
         When continue condition ceases to be satisfied the evolution stops
         """
         spread = np.ptp(self.Values)
         return (self.EvolutionCounter<self.MaxIter )
 
+    def ContinueCondition_Hybrid(self):
+        """
+        When continue condition ceases to be satisfied the evolution stops
+        """
+
+        continue_evolution = True
+
+        if (self.EvolutionCounter> int(self.Convergence_testing_num_iterations)):
+
+            if (self.BestKnownSwarmValue - self.FuncHistory[-self.Convergence_testing_num_iterations]) < self.Tol:
+
+                continue_evolution = False
+
+        if self.EvolutionCounter>=self.MaxIter:
+
+            continue_evolution = False
+
+        return (continue_evolution)
 
     def CreateEvolutionHistoryFile(self):
         """

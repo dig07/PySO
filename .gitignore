@@ -1,3 +1,6 @@
 PySO.egg-info/
 examples/hierarchical_results/
 examples/High_dimensional_MH/
+**/.ipynb_checkpoints
+**/__pycache__
+dist/
