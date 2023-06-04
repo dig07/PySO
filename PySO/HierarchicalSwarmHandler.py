@@ -59,9 +59,9 @@ class HierarchicalSwarmHandler(object):
             the phi_p parameter for each hierarhical model, cognitive coefficient for velocity updating [defaults to .2]
         PhiG: float or list
             the phi_g parameter for each hierarhical model, social coefficient for velocity updating [defaults to .2]
-        MH_fraction: float:
+        MH_fraction: float
             parameter controlling proportion of velocity rule dictated by MCMC, for each hierarchical model [defaults to 0.]
-        Swarm_kwargs: dict,
+        Swarm_kwargs: dict
             dictionary of common arguments between all swarms
         Output: str
             folder in which to save output [defaults to './']
@@ -81,11 +81,11 @@ class HierarchicalSwarmHandler(object):
         Maximum_number_of_iterations_per_step: int
             Maximum number of iterations per step
         Minimum_exploration_iterations: int
-            Minimum number of iterations to be done in each step before stall condition evaluated
+            Minimum number of iterations to be done in each step before stall condition evaluated [defaults to 50]
         Initial_exploration_limit: int
-            Minimum number of iterations done in the very first step before stall condition evaluated
+            Minimum number of iterations done in the very first step before stall condition evaluated [defaults to 150]
         clustering_indices: None or list of int
-            Parameter position indexes to use for relabelling/clustering step
+            Parameter position indexes to use for relabelling/clustering step [defaults to all parameters]
         use_func_vals_in_clustering: boolean
             Boolean flag for using function values for clustering or not [defaults to False]
         kick_velocities: boolean
@@ -217,7 +217,7 @@ class HierarchicalSwarmHandler(object):
         self.BestCurrentSwarm = list(self.Swarms.keys())[np.argmax(initial_max_func_vals)]
         self.EvolutionCounter = 0
 
-
+        print('Swarm initialisation finished....')
     def EvolveSwarms(self):
         """
         Evolve every swarm through a single iteration
@@ -628,7 +628,6 @@ class HierarchicalSwarmHandler(object):
         Evaluate stall condition for a given swarm
         """
         stalled = (((np.mean(Swarm.Spreads[-20:-10]) <= np.mean(Swarm.Spreads[-10:])) and
-         # all(element == Swarm.FuncHistory[-20] for element in Swarm.FuncHistory[-20:]))
                    (np.abs(Swarm.FuncHistory[-1] - Swarm.FuncHistory[-20]) < 0.01*np.abs(Swarm.FuncHistory[-20]))) or
                     (Swarm.EvolutionCounter >=  self.Maximum_number_of_iterations_per_step ))
         return stalled

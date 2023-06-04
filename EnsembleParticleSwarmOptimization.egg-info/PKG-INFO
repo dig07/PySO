@@ -11,6 +11,8 @@ Description: # PySO
         
         Currently under development. 
         
+        See current To do list here: https://trello.com/b/SEnVSWWd/to-do-list
+        
 Platform: UNKNOWN
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License

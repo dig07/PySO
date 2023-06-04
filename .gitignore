@@ -1,5 +1,7 @@
 PySO.egg-info/
-examples/hierarchical_results/
+examples/hierarchical_results/*.dat
+examples/hierarchical_results/*.pkl
+examples/hierarchical_results/*.txt
 examples/High_dimensional_MH/
 **/.ipynb_checkpoints
 **/__pycache__
