@@ -54,7 +54,7 @@ def KMeans_clustering(X_std, K):
         for each particle, return an int in the range 0, K-1
         identifying the cluster to which it belongs
     """
-    kmeans = KMeans(n_clusters=K)
+    kmeans = KMeans(n_clusters=K,n_init='auto')
     kmeans.fit(X_std)
 
     I = kmeans.inertia_

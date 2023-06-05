@@ -3,7 +3,7 @@ from .MWE_Swarm import Swarm
 from .SwarmHandler import SwarmHandler
 from .HierarchicalSwarmHandler import HierarchicalSwarmHandler
 
-__version__ = '0.0.1'
+__version__ = '0.1.1'
 
 name = "PySO"
 

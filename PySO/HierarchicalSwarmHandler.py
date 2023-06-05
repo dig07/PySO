@@ -38,7 +38,11 @@ class HierarchicalSwarmHandler(object):
                  kick_velocities = True,
                  fitness_veto_fraction = 0.05,
                  max_particles_per_swarm = None,
-                 redraw_velocities_at_segmentation = False):
+                 redraw_velocities_at_segmentation = False,
+                 clustering_min_membership = 5,
+                 clustering_max_clusters = 70,
+                 Tol = 1.0e-2,
+                 Convergence_testing_num_iterations = 50):
         """
 
         REQUIRED INPUTS
@@ -97,16 +101,26 @@ class HierarchicalSwarmHandler(object):
             Maximum number of particles per swarm [defaults to int(total_num_particles/10)]
         redraw_velocities_at_segmentation: Boolean
             Boolean flag indicating if the velocities should be redrawn from swarm position ranges at each segmentation step [defaults to False]
+        clustering_min_membership: int
+            minimum number of particles in each swarm [defaults to 5]
+        clustering_max_clusters: int
+            maximum number of clusters to test for the clustering [defaults to 70]
+        Tol: float
+            the minimum improvement on functionvalue for each swarm that we class as not stalled [defaults to 1e-2]
+        Convergence_testing_num_iterations: int
+            If best swarm value has not improved over this many last iterations (improved past Tol) [defaults to 50]
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
         self.Hierarchical_models = Hierarchical_models
 
+        # Ladder for PSO hyper-parameters
         self.Omegas = Omega
         self.PhiPs = PhiP
         self.PhiGs = PhiG
         self.MH_fractions = MH_fraction
 
+        # If PSO hyper-parameters are only a float, replicate them for each step in the ladder
         if type(self.Omegas) == float:
             self.Omegas = [self.Omegas] * len(self.Hierarchical_models)
             self.PhiPs = [self.PhiPs] * len(self.Hierarchical_models)
@@ -115,13 +129,19 @@ class HierarchicalSwarmHandler(object):
         else:
             assert len(self.Omegas) == len(self.Hierarchical_models), "Please ensure your PSO parameter lists correspond to the correct number of hierarchical steps "
 
-
+        # Parameter names
         self.Model_axis_names = self.Hierarchical_models[1].names
 
+
+        # Number of dimensions
         self.Ndim = len(self.Model_axis_names)
 
         self.NumSwarms = NumSwarms
+
+        # NOTE THIS NAME IS MISLEADING, this is just the total size of the initial swarm
         self.NumParticlesPerSwarm = NumParticlesPerSwarm
+
+        # Common parameters for all swarms
         self.Swarm_kwargs = Swarm_kwargs
 
         self.nPeriodicCheckpoint = nPeriodicCheckpoint
@@ -137,48 +157,72 @@ class HierarchicalSwarmHandler(object):
         # Refering to the hierarchical steps
         self.Maximum_number_of_iterations_per_step = Maximum_number_of_iterations_per_step
 
+        # Minimum number of iterations the swarms will conduct before they evaluate the stall condition
         self.Minimum_exploration_iterations = Minimum_exploration_iterations
 
+        # Minimum number of iterations for the first model
         self.Initial_exploration_limit = Initial_exploration_limit
 
-
+        # Maximum number of iterations the whole ensemble of swarms will run for
         self.Maxiter = Maxiter
 
+        # UNTESTED RESUME FUNCTIONALITY
         self.Resume = Resume
 
+        # Output directory
         self.Output = Output
 
+        # If we have given then swarm names, otherwise default to numbered list
         self.Swarm_names = Swarm_names
         if self.Swarm_names == None: self.Swarm_names = np.arange(self.NumSwarms) # Defaults to numbered list of swarms
 
-
+        # If the clustering is done only in certain parameters, otherwise cluster in all dimensions (Not including objective function value)
         self.clustering_indices  = clustering_indices
         if self.clustering_indices == None: self.clustering_indices = np.arange(self.Ndim) # Use all parameters by default in clustering
 
+        # If the objective function value is to be used in the clustering process.
         self.use_func_vals_in_clustering = use_func_vals_in_clustering
 
+        # If true, draw new velocities from the new swarms particle positions using a normal distribution [ DEFAULTS TO TRUE ]
+        # If false, use previous particle velocities
         self.kick_velocities = kick_velocities
 
+        # If true, draw new velocities from the new swarms particle positions using a uniform distribution [ DEFAULTS TO FALSE ]
+        # If false, use previous particle velocities
         self.redraw_velocities_at_segmentation = redraw_velocities_at_segmentation
 
+        # self.fitness_veto_fraction * best_objective_function_Val below which we throw swarms away (reassign particles to other swarms)
         self.fitness_veto_fraction = fitness_veto_fraction
 
+        # Maximum particles per swarm, defaults to total particles over 10
         self.max_particles_per_swarm = max_particles_per_swarm
         if self.max_particles_per_swarm == None: self.max_particles_per_swarm = int(self.NumParticlesPerSwarm/10)
 
-        #Initialise swarms
+        # Initialise swarms
         self.InitialiseSwarms()
 
+        # frozen swarms are temporarily held in this dict
         self.frozen_swarms = {}
 
+        # Counts which hierarchical model we are on
         self.Hierarchical_model_counter = 0
 
         # Boolean variable to indicate if all swarms at the current level have stalled
         self.AllStalled = False
 
+        # Variable to check if all swarms have finishing iterating on the last hierarchical model.
         self.swarm_stepping_done = False
 
+        # Clustering parameters (See docstrings)
+        self.clustering_min_membership = clustering_min_membership
+        self.clustering_max_clusters = clustering_max_clusters
+
+        # RESUME FUNCTIONALITY UNTESTED TODO: TEST
         resume_file = os.path.join(self.Output, "PySO_resume.pkl")
+
+        # Stall testing parameters
+        self.Tol = Tol
+        self.Convergence_testing_num_iterations = Convergence_testing_num_iterations
 
         if self.Resume and os.path.exists(resume_file):
             print('Resuming from file {}'.format(resume_file))
@@ -190,11 +234,13 @@ class HierarchicalSwarmHandler(object):
         Initialise the swarm points, values and velocities
 
         """
+        # self.Swarms contains all the swarms.
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
                                                             **self.Swarm_kwargs)
                        for swarm_index in self.Swarm_names}
 
+        # Computed stability number to check for convergence criteria (might be pointless)
         stability_num = self.stability_check(self.Omegas[0],
                                              self.PhiPs[0],
                                              self.PhiGs[0])
@@ -224,6 +270,7 @@ class HierarchicalSwarmHandler(object):
         """
         self.EvolutionCounter += 1
 
+        # TODO: Could probably speed this up by assigning different pools of CPUs to different Swarms
         for name in list(self.Swarms.keys()):
             self.Swarms[name].EvolveSwarm()
 
@@ -272,8 +319,6 @@ class HierarchicalSwarmHandler(object):
                 self.frozen_swarms[swarm_index].BestKnownSwarmPoints = np.delete(self.frozen_swarms[swarm_index].BestKnownPoints,lowest_fitness_particle_indices,0)
                 self.frozen_swarms[swarm_index].BestKnownSwarmValue = np.delete(self.frozen_swarms[swarm_index].BestKnownValues,lowest_fitness_particle_indices,0)
 
-                # if current size is over 25 it will just get bigger once reclustering occurs probably
-
                 print('Swarm ',swarm_index, ' is over the maximum size per swarm, redistributing ',num_particles_in_swarm -
                       self.max_particles_per_swarm,' Particles')
 
@@ -288,12 +333,11 @@ class HierarchicalSwarmHandler(object):
         # But dont want this redistribution to take place on the first "exploratory" swarm
         # Also dont want to redistribute if we are mostly doing MH MCMC velocity rule, as we dont expect strong clustering there
         if self.Hierarchical_model_counter != 0 and self.MH_fractions[self.Hierarchical_model_counter]< 0.1:
+            # this is the TOTAL number of particles to be redistributed to a new swarm
             num_particles_redistributed = self.veto_and_redistribute()
 
         # Extract positions to be used for clustering, only using the indices of parameters that are well measured AND function value     #
         # Feature_array - Particle positions, function values, not all components (Specially not ones well measured)
-        # Chirp mass, distance, sky position, effective spin, time to merger, function values
-
 
         clustering_parameter_positions = np.array([np.take(self.frozen_swarms[swarm_index].Points,self.clustering_indices,axis=1) for swarm_index
                                in self.frozen_swarms.keys()])
@@ -309,8 +353,8 @@ class HierarchicalSwarmHandler(object):
         else:
             clustering_features = clustering_parameter_positions
 
-
-        K, memberships = Clustering(clustering_features, min_membership=5,max_clusters=70)
+        # min membership is the minimum number of particles per swarm and max clusters is the maximum number of clusters
+        K, memberships = Clustering(clustering_features,min_membership=self.clustering_min_membership,max_clusters=self.clustering_max_clusters)
 
 
         total_particle_positions = np.array([self.frozen_swarms[swarm_index].Points for swarm_index
@@ -325,6 +369,7 @@ class HierarchicalSwarmHandler(object):
               ' PhiP: ',self.PhiPs[self.Hierarchical_model_counter+1],
               ' PhiG: ',self.PhiGs[self.Hierarchical_model_counter+1])
 
+        # Stability check for convergence (Might be removed)
         stability_num = self.stability_check(self.Omegas[self.Hierarchical_model_counter+1],
                                              self.PhiPs[self.Hierarchical_model_counter+1],
                                              self.PhiGs[self.Hierarchical_model_counter+1])
@@ -333,23 +378,26 @@ class HierarchicalSwarmHandler(object):
         if stability_num<=0:
             warnings.warn('Stability number is less than 0, initiated swarm is not guranteed to converge!')
 
-
+        # Create each swarm
         for swarm_index in range(K):
 
               swarm_particle_positions = total_particle_positions[np.where(memberships == swarm_index)[0]]
               swarm_particle_velocities = total_particle_velocities[np.where(memberships == swarm_index)[0]]
               self.Swarms[swarm_index] = self.Reinitiate_swarm(swarm_particle_positions, swarm_particle_velocities)
 
-
+        # Check to make sure that we arent on the first segment and there are actually particles to be redistributed (from veto)
+        # Extra swarm for redistributed particles
         if self.Hierarchical_model_counter != 0 and num_particles_redistributed>0:
-            # Redistribute particles from veto step above
+            # Re-distribute particles into a NEW swarm, ie all redistributing particles go into this new swarm (This may not be a good idea in the end)
+
+            # Get all positions from all frozen swarms, which at this stage is ALL swarms (from previous segment)
             parameter_positions = np.array(
-                [self.frozen_swarms[swarm_index].Points  for swarm_index
+                [self.frozen_swarms[swarm_index].Points for swarm_index
                  in self.frozen_swarms.keys()])
 
             parameter_positions = np.concatenate(parameter_positions)
 
-            # Distribute them using covariance matrix of current clusters
+            # Distribute the new swarms positions basically using the centre point of all the current swarms
             cov = np.cov(parameter_positions.T)
             position_mean = np.mean(parameter_positions,axis=0)
             velocity_mean = np.zeros(self.Ndim)
@@ -359,6 +407,8 @@ class HierarchicalSwarmHandler(object):
 
             # Extra redistributed swarm
             self.Swarms[K] = self.Reinitiate_swarm(redistributed_particle_positions, redistributed_particle_velocities)
+
+        # Empty the frozen swarms dict as we are done with the old swarms
         self.frozen_swarms = {}
         self.AllStalled = False
 
@@ -425,13 +475,13 @@ class HierarchicalSwarmHandler(object):
 
         num_particles = positions.shape[0]
 
-        newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter+ 1],num_particles,
+        newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
                          Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction , **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions
 
-        if self.kick_velocities == True: #and self.Hierarchical_model_counter>0.5*len(self.Hierarchical_models):
+        if self.kick_velocities == True:
             # Kick the reinitialised velocities
             # Regenerate velocities from a normal distribution specified by the covariance of particles in swarm
             vel_cov = np.cov(positions.T)
@@ -444,22 +494,29 @@ class HierarchicalSwarmHandler(object):
         else:
             newswarm.Velocities = velocities
 
+        ## TODO: Need to merge kick_velocity option with redraw_velocities_at_segmentation since they do very similar things
+
         if self.redraw_velocities_at_segmentation == True:
 
+            # Work out the peak to peak of the positions in each axis.
             ptp_vel_bounds = np.ptp(np.array([np.min(positions,axis=0),np.max(positions,axis=0)]).T,axis=1)
 
+            # draw velocities from U[-ptp/2,ptp/2]
             newswarm.Velocities = (ptp_vel_bounds) * np.random.random_sample(size=(num_particles,self.Ndim)) - ptp_vel_bounds/2
 
-
+        # Carry over points from previous models optimization
         newswarm.BestKnownPoints = copy.deepcopy(newswarm.Points)
 
         # Recalculate best personal known values:
         for i in range(newswarm.NumParticles):
+            # TODO: This be paralellized
             newswarm.BestKnownValues[i] = newswarm.Model.log_likelihood(
                 dict(zip(newswarm.Model.names, newswarm.Points[i])))
 
+        # First values for each particle are by definition their best known values
         newswarm.Values = copy.deepcopy(newswarm.BestKnownValues)
 
+        # Best point and swarm value
         newswarm.BestKnownSwarmPoint = newswarm.BestKnownPoints[np.argmax(newswarm.BestKnownValues)]
         newswarm.BestKnownSwarmValue = np.max(newswarm.BestKnownValues)
 
@@ -527,7 +584,7 @@ class HierarchicalSwarmHandler(object):
         """
         history_file_path = os.path.join(self.Output, "EnsembleEvolutionHistory.dat")
 
-        # "# particle_number, name1, name2, name3, ..., function_value\n"
+        # "# swarm name, particle_number, name1, name2, name3, ..., function_value\n"
         for swarm_name in list(self.Swarms.keys()):
             for particle_index in range(self.Swarms[swarm_name].NumParticles):
                 string = str(swarm_name) + ","
@@ -540,7 +597,7 @@ class HierarchicalSwarmHandler(object):
                 file.write(string)
                 file.close()
 
-        # All the frozen swarm data
+        # All the frozen swarm data : Might be redundant to store these instead of with a 'frozen' flag but helps with visualisation for now
         for swarm_name in list(self.frozen_swarms.keys()):
             for particle_index in range(self.frozen_swarms[swarm_name].NumParticles):
                 string = str(swarm_name) + ","
@@ -559,7 +616,6 @@ class HierarchicalSwarmHandler(object):
         final_swarm_positions = np.concatenate([self.frozen_swarms[swarm_index].Points for swarm_index in list(self.frozen_swarms.keys())])
         final_swarm_values = np.concatenate(np.array([self.frozen_swarms[swarm_index].Values for swarm_index in list(self.frozen_swarms.keys())]))
         final_swarm_positions_filename = os.path.join(self.Output, "final_swarm_positions.txt")
-        final_swarm_values_filename = os.path.join(self.Output, "final_swarm_values.txt")
         final_swarm_values_filename = os.path.join(self.Output, "final_swarm_values.txt")
 
         np.savetxt(final_swarm_positions_filename,final_swarm_positions)
@@ -585,7 +641,7 @@ class HierarchicalSwarmHandler(object):
         Checks if any of the swarms meet the condition to switch to the next model
         """
 
-
+        # If all swarms are not stalled yet
         if self.AllStalled == False:
 
             for swarm_index, Swarm_ in zip(list(self.Swarms.keys()),list(self.Swarms.values())):
@@ -625,17 +681,21 @@ class HierarchicalSwarmHandler(object):
 
     def stall_condition(self,Swarm):
         """
-        Evaluate stall condition for a given swarm
+        Evaluate stall condition for a given swarm.
+
+        Current stall condition is the best swarm value has not increased more than a tolerance (default of 0.01)
+        in the last some number of iterations (defaults to 50). Swarm also stalls if the evolution counter goes over
+        the maximum number of iterations per step.
         """
-        stalled = (((np.mean(Swarm.Spreads[-20:-10]) <= np.mean(Swarm.Spreads[-10:])) and
-                   (np.abs(Swarm.FuncHistory[-1] - Swarm.FuncHistory[-20]) < 0.01*np.abs(Swarm.FuncHistory[-20]))) or
-                    (Swarm.EvolutionCounter >=  self.Maximum_number_of_iterations_per_step ))
+        stalled = ((np.abs(Swarm.BestKnownSwarmValue - Swarm.FuncHistory[-self.Convergence_testing_num_iterations]) < self.Tol) or
+                    (Swarm.EvolutionCounter >= self.Maximum_number_of_iterations_per_step))
+
         return stalled
 
 
     def Run(self):
         """
-        Run optmisation/sampling for all swarms
+        Run optimisation/sampling for all swarms
         """
         if self.SaveEvolution and self.EvolutionCounter==0:
             self.CreateEvolutionHistoryFile()
