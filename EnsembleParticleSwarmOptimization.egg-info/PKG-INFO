@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: EnsembleParticleSwarmOptimization
-Version: 0.1.0
+Version: 0.1.1
 Summary: Ensemble of particle swarms together with various velocity rules for function optimization
 Home-page: https://github.com/dig07/PySO
 Author: Christopher Moore and Diganta Bandopadhyay
@@ -10,6 +10,9 @@ Description: # PySO
         Particle swarm optimizer
         
         Currently under development. 
+        
+        ![Multiple Swarm](examples/hierarchical_results/animation_non_periodic.gif)
+        
         
         See current To do list here: https://trello.com/b/SEnVSWWd/to-do-list
         

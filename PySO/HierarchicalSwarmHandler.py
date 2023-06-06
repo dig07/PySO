@@ -16,31 +16,31 @@ class HierarchicalSwarmHandler(object):
 
     def __init__(self,
                  Hierarchical_models,
-                 NumSwarms,
-                 NumParticlesPerSwarm,
+                 Numswarms,
+                 Numparticlesperswarm,
                  Omega = 0.6,
-                 PhiP = 0.2,
-                 PhiG = 0.2,
-                 MH_fraction = 0.0,
+                 Phip = 0.2,
+                 Phig = 0.2,
+                 Mh_fraction = 0.0,
                  Swarm_kwargs={},
                  Output = './',
-                 nPeriodicCheckpoint = 10,
+                 Nperiodiccheckpoint = 10,
                  Swarm_names = None,
                  Verbose = False,
-                 SaveEvolution = False,
+                 Saveevolution = False,
                  Maxiter = 1e4,
                  Resume = True,
                  Maximum_number_of_iterations_per_step=400,
                  Minimum_exploration_iterations = 50,
                  Initial_exploration_limit= 150,
-                 clustering_indices = None,
-                 use_func_vals_in_clustering = False,
-                 kick_velocities = True,
-                 fitness_veto_fraction = 0.05,
-                 max_particles_per_swarm = None,
-                 redraw_velocities_at_segmentation = False,
-                 clustering_min_membership = 5,
-                 clustering_max_clusters = 70,
+                 Clustering_indices = None,
+                 Use_func_vals_in_clustering = False,
+                 Kick_velocities = True,
+                 Fitness_veto_fraction = 0.05,
+                 Max_particles_per_swarm = None,
+                 Redraw_velocities_at_segmentation = False,
+                 Clustering_min_membership = 5,
+                 Clustering_max_clusters = 70,
                  Tol = 1.0e-2,
                  Convergence_testing_num_iterations = 50):
         """
@@ -63,7 +63,7 @@ class HierarchicalSwarmHandler(object):
             the phi_p parameter for each hierarhical model, cognitive coefficient for velocity updating [defaults to .2]
         PhiG: float or list
             the phi_g parameter for each hierarhical model, social coefficient for velocity updating [defaults to .2]
-        MH_fraction: float
+        Mh_fraction: float
             parameter controlling proportion of velocity rule dictated by MCMC, for each hierarchical model [defaults to 0.]
         Swarm_kwargs: dict
             dictionary of common arguments between all swarms
@@ -92,7 +92,7 @@ class HierarchicalSwarmHandler(object):
             Parameter position indexes to use for relabelling/clustering step [defaults to all parameters]
         use_func_vals_in_clustering: boolean
             Boolean flag for using function values for clustering or not [defaults to False]
-        kick_velocities: boolean
+        Kick_velocities: boolean
             Boolean flag for reinitialising velocities from position distribution
             on clustering and segmenting [defaults to True]
         fitness_veto_fraction: float
@@ -116,9 +116,9 @@ class HierarchicalSwarmHandler(object):
 
         # Ladder for PSO hyper-parameters
         self.Omegas = Omega
-        self.PhiPs = PhiP
-        self.PhiGs = PhiG
-        self.MH_fractions = MH_fraction
+        self.PhiPs = Phip
+        self.PhiGs = Phig
+        self.MH_fractions = Mh_fraction
 
         # If PSO hyper-parameters are only a float, replicate them for each step in the ladder
         if type(self.Omegas) == float:
@@ -136,15 +136,15 @@ class HierarchicalSwarmHandler(object):
         # Number of dimensions
         self.Ndim = len(self.Model_axis_names)
 
-        self.NumSwarms = NumSwarms
+        self.NumSwarms = Numswarms
 
         # NOTE THIS NAME IS MISLEADING, this is just the total size of the initial swarm
-        self.NumParticlesPerSwarm = NumParticlesPerSwarm
+        self.NumParticlesPerSwarm = Numparticlesperswarm
 
         # Common parameters for all swarms
         self.Swarm_kwargs = Swarm_kwargs
 
-        self.nPeriodicCheckpoint = nPeriodicCheckpoint
+        self.nPeriodicCheckpoint = Nperiodiccheckpoint
 
         self.BestKnownEnsemblePoint = np.zeros(self.Ndim)
         self.BestKnownEnsembleValue = None
@@ -152,7 +152,7 @@ class HierarchicalSwarmHandler(object):
 
         self.Verbose = Verbose
 
-        self.SaveEvolution = SaveEvolution
+        self.SaveEvolution = Saveevolution
 
         # Refering to the hierarchical steps
         self.Maximum_number_of_iterations_per_step = Maximum_number_of_iterations_per_step
@@ -177,25 +177,25 @@ class HierarchicalSwarmHandler(object):
         if self.Swarm_names == None: self.Swarm_names = np.arange(self.NumSwarms) # Defaults to numbered list of swarms
 
         # If the clustering is done only in certain parameters, otherwise cluster in all dimensions (Not including objective function value)
-        self.clustering_indices  = clustering_indices
+        self.clustering_indices  = Clustering_indices
         if self.clustering_indices == None: self.clustering_indices = np.arange(self.Ndim) # Use all parameters by default in clustering
 
         # If the objective function value is to be used in the clustering process.
-        self.use_func_vals_in_clustering = use_func_vals_in_clustering
+        self.use_func_vals_in_clustering = Use_func_vals_in_clustering
 
         # If true, draw new velocities from the new swarms particle positions using a normal distribution [ DEFAULTS TO TRUE ]
         # If false, use previous particle velocities
-        self.kick_velocities = kick_velocities
+        self.kick_velocities = Kick_velocities
 
         # If true, draw new velocities from the new swarms particle positions using a uniform distribution [ DEFAULTS TO FALSE ]
         # If false, use previous particle velocities
-        self.redraw_velocities_at_segmentation = redraw_velocities_at_segmentation
+        self.redraw_velocities_at_segmentation = Redraw_velocities_at_segmentation
 
         # self.fitness_veto_fraction * best_objective_function_Val below which we throw swarms away (reassign particles to other swarms)
-        self.fitness_veto_fraction = fitness_veto_fraction
+        self.fitness_veto_fraction = Fitness_veto_fraction
 
         # Maximum particles per swarm, defaults to total particles over 10
-        self.max_particles_per_swarm = max_particles_per_swarm
+        self.max_particles_per_swarm = Max_particles_per_swarm
         if self.max_particles_per_swarm == None: self.max_particles_per_swarm = int(self.NumParticlesPerSwarm/10)
 
         # Initialise swarms
@@ -214,8 +214,8 @@ class HierarchicalSwarmHandler(object):
         self.swarm_stepping_done = False
 
         # Clustering parameters (See docstrings)
-        self.clustering_min_membership = clustering_min_membership
-        self.clustering_max_clusters = clustering_max_clusters
+        self.clustering_min_membership = Clustering_min_membership
+        self.clustering_max_clusters = Clustering_max_clusters
 
         # RESUME FUNCTIONALITY UNTESTED TODO: TEST
         resume_file = os.path.join(self.Output, "PySO_resume.pkl")
