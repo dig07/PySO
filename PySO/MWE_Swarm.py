@@ -341,7 +341,7 @@ class Swarm(object):
         Boundary conditions on the edge of the search region
         """
         # Periodic BCs
-        self.Points = self.BoundsArray[:,0] + np.fmod(self.Points-self.BoundsArray[:,0],self.PeriodicParamRanges)
+        self.Points = self.BoundsArray[:,0] + np.mod(self.Points-self.BoundsArray[:,0],self.PeriodicParamRanges)
 
         # Hard edges
         clipped_points = np.clip(self.Points, a_min=self.BoundsArray[:,0], a_max=self.BoundsArray[:,1])

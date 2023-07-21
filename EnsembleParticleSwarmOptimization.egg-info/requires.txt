@@ -1,9 +1,9 @@
+numpy>=1.15.0
+scipy
+pandas
+matplotlib
+scikit-learn
+seaborn
+pathos
 dill
 kneed
-matplotlib
-numpy>=1.15.0
-pandas
-pathos
-scikit-learn
-scipy
-seaborn

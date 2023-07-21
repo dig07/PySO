@@ -3,6 +3,7 @@ examples/hierarchical_results/*.dat
 examples/hierarchical_results/*.pkl
 examples/hierarchical_results/*.txt
 examples/High_dimensional_MH/
+examples/MWE_swarm/*
 **/.ipynb_checkpoints
 **/__pycache__
 dist/
