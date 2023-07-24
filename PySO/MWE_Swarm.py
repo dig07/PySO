@@ -194,6 +194,8 @@ class Swarm(object):
                                             np.inf if self.Periodic[i]==0 else np.ptp(b)
                                         for i, b in enumerate(self.Model.bounds)])
 
+	# Param indexes where periodicity happens
+        self.Periodic_params = np.where(self.Periodic == 1)[0]
 
         self.BoundsArray = np.array(self.Model.bounds)
 
@@ -341,7 +343,7 @@ class Swarm(object):
         Boundary conditions on the edge of the search region
         """
         # Periodic BCs
-        self.Points = self.BoundsArray[:,0] + np.mod(self.Points-self.BoundsArray[:,0],self.PeriodicParamRanges)
+        self.Points[:,self.Periodic_params] = self.BoundsArray[self.Periodic_params,0] + np.mod(self.Points[:,self.Periodic_params]-self.BoundsArray[self.Periodic_params,0],self.PeriodicParamRanges[self.Periodic_params])
 
         # Hard edges
         clipped_points = np.clip(self.Points, a_min=self.BoundsArray[:,0], a_max=self.BoundsArray[:,1])
