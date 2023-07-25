@@ -185,10 +185,10 @@ class Swarm(object):
         self.Nthreads = Nthreads
 
         if Periodic is None:
-            self.Periodic = [ 0 for i in range(self.Ndim)]
+            self.Periodic = np.array([ 0 for i in range(self.Ndim)])
         else:
             assert (  len(Periodic)==self.Ndim  and  all(np.isin(Periodic, [0,1]))  )
-            self.Periodic = list(Periodic)
+            self.Periodic = np.array(list(Periodic))
 
         self.PeriodicParamRanges = np.array([
                                             np.inf if self.Periodic[i]==0 else np.ptp(b)
