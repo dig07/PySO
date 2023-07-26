@@ -1,8 +1,8 @@
 Final Results:
-Num Iterations: 59
-Max Value: -0.9191988914490292
-Best Point: [ 2.4823285  -1.88556273]
+Num Iterations: 52
+Max Value: -0.9189691377270622
+Best Point: [ 2.49333533 -1.90409771]
 Covariance Matrix:
-[[ 0.17926536 -0.00434435]
- [-0.00434435  0.22555727]]
-Uncertainties = sqrt(diag(cov)): [0.4233974 0.4749287]
+[[0.17461675 0.00158782]
+ [0.00158782 0.18453136]]
+Uncertainties = sqrt(diag(cov)): [0.41787169 0.42957114]
