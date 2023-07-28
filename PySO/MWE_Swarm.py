@@ -342,17 +342,20 @@ class Swarm(object):
         """
         Boundary conditions on the edge of the search region
         """
-        # Periodic BCs
+        # Periodic boundary conditions
         self.Points[:,self.Periodic_params] = self.BoundsArray[self.Periodic_params,0] + np.mod(self.Points[:,self.Periodic_params]-self.BoundsArray[self.Periodic_params,0],self.PeriodicParamRanges[self.Periodic_params])
-
-
-        # Mask for points that are clipped
+	    
+        # Mask for points that are out of range
         upper_mask_indices = np.where((self.Points - self.BoundsArray[:,1])>0)
         lower_mask_indices = np.where((self.Points - self.BoundsArray[:,0])<0)
 
-        # Reflective boundary conditions
+        # Reflective boundary conditions (positions)
         self.Points[upper_mask_indices] = self.BoundsArray[upper_mask_indices[1],1] - np.abs(self.Points[upper_mask_indices] - self.BoundsArray[upper_mask_indices[1],1])
         self.Points[lower_mask_indices] = self.BoundsArray[lower_mask_indices[1],0] + np.abs(self.Points[lower_mask_indices] - self.BoundsArray[lower_mask_indices[1],0])
+
+	# Clipping positions (to make extra sure that all params are in range)
+
+	# Reflective boundary conditions (velocities)
 
 
     def PSO_VelocityRule(self):
