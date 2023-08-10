@@ -6,3 +6,5 @@ scikit-learn
 pathos
 dill
 kneed
+seaborn
+pillow
