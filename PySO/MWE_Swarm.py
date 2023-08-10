@@ -353,12 +353,12 @@ class Swarm(object):
         self.Points[upper_mask_indices] = self.BoundsArray[upper_mask_indices[1],1] - np.abs(self.Points[upper_mask_indices] - self.BoundsArray[upper_mask_indices[1],1])
         self.Points[lower_mask_indices] = self.BoundsArray[lower_mask_indices[1],0] + np.abs(self.Points[lower_mask_indices] - self.BoundsArray[lower_mask_indices[1],0])
 	
-	# Clipping positions (to make extra sure that all params are in range)
-	self.Points = np.clip(self.Points, a_min=self.BoundsArray[:,0], a_max=self.BoundsArray[:,1])
+        # Clipping positions (to make extra sure that all params are in range)
+        self.Points = np.clip(self.Points, a_min=self.BoundsArray[:,0], a_max=self.BoundsArray[:,1])
 
-	# Reflective boundary conditions (velocities)
-	self.Velocities[upper_mask_indices] *= -1
-	self.Velocities[lower_mask_indices] *= -1
+        # Reflective boundary conditions (velocities)
+        self.Velocities[upper_mask_indices] *= -1
+        self.Velocities[lower_mask_indices] *= -1
 	
 
 
