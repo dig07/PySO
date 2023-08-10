@@ -3,7 +3,6 @@ from pathos.multiprocessing import ProcessingPool as Pool
 # from multiprocessing_on_dill import Pool
 import os
 import pickle
-import seaborn as sns
 from .Model import Model
 
 import matplotlib
