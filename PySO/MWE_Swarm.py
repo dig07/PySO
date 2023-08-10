@@ -4,6 +4,7 @@ from pathos.multiprocessing import ProcessingPool as Pool
 import os
 import pickle
 from .Model import Model
+import seaborn as sns
 
 import matplotlib
 import matplotlib.pyplot as plt
