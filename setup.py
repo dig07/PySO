@@ -14,7 +14,7 @@ setuptools.setup(
     url="https://github.com/dig07/PySO",
     packages=setuptools.find_packages(),
     python_requires='>=3',
-    install_requires=['numpy>=1.15.0', 'scipy', 'pandas', 'matplotlib','scikit-learn','pathos','dill','kneed','seaborn','pillow'],
+    install_requires=['numpy>=1.15.0', 'scipy', 'pandas', 'matplotlib','scikit-learn','pathos','dill','kneed','seaborn','pillow==7.1.0'],
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
