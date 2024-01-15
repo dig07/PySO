@@ -11,3 +11,10 @@ Install with ```pip install EnsembleParticleSwarmOptimization``` or ```conda ins
 Currently under development. 
 
 ![Multiple Swarm](examples/hierarchical_results/animation_non_periodic.gif)
+
+**Publications**
+- LISA stellar-mass black hole searches with semicoherent and particle-swarm methods, Phys. Rev. D 108, 084014
+
+**Authors**
+- Diganta Bandopadhyay
+- [Christopher J. Moore](https://github.com/cjm96)
