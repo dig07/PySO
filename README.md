@@ -13,7 +13,7 @@ Currently under development.
 ![Multiple Swarm](examples/hierarchical_results/animation_non_periodic.gif)
 
 **Publications**
-- LISA stellar-mass black hole searches with semicoherent and particle-swarm methods, Phys. Rev. D 108, 084014
+- LISA stellar-mass black hole searches with semicoherent and particle-swarm methods, Phys. Rev. D 108, 084014, [arxiv:2305.18048](https://arxiv.org/abs/2305.18048).
 
 **Authors**
 - Diganta Bandopadhyay
