@@ -10,6 +10,16 @@ Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3
 Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.15.0
+Requires-Dist: scipy
+Requires-Dist: pandas
+Requires-Dist: matplotlib
+Requires-Dist: scikit-learn
+Requires-Dist: pathos
+Requires-Dist: dill
+Requires-Dist: kneed
+Requires-Dist: seaborn
+Requires-Dist: pillow
 
 # PySO
 Particle swarm optimizer 
@@ -24,3 +34,10 @@ Install with ```pip install EnsembleParticleSwarmOptimization``` or ```conda ins
 Currently under development. 
 
 ![Multiple Swarm](examples/hierarchical_results/animation_non_periodic.gif)
+
+**Publications**
+- LISA stellar-mass black hole searches with semicoherent and particle-swarm methods, Phys. Rev. D 108, 084014, [arxiv:2305.18048](https://arxiv.org/abs/2305.18048).
+
+**Authors**
+- Diganta Bandopadhyay
+- [Christopher J. Moore](https://github.com/cjm96)

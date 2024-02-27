@@ -1,12 +1,11 @@
 import numpy as np
 from pathos.multiprocessing import ProcessingPool as Pool
-# from multiprocessing_on_dill import Pool
+
 import os
 import pickle
-from .Model import Model
+
 import seaborn as sns
 
-import matplotlib
 import matplotlib.pyplot as plt
 
 
@@ -33,6 +32,7 @@ class Swarm(object):
                  Resume = False,
                  Verbose = False,
                  Saveevolution = False,
+                 Plotevolution = False,
                  Velocity_min = None,
                  Velocity_minimum_factor = 100,
                  Proposalcov = None,
@@ -106,6 +106,8 @@ class Swarm(object):
             Verbosity [defaults to False]
         Saveevolution: bool
             save the entire evolution of the swarm [defaults to False]
+        Plotevolution: bool
+            Plot the function values as a function of iteration and the pairplot trajectories for particles [defaults to False]
         Velocity_min: None or numpy array
             (absolute) minimum velocity in every dimension, defaults to 1/100th of each dimension
         Velocity_minimum_factor: int or float
@@ -181,6 +183,8 @@ class Swarm(object):
         self.Verbose = Verbose
 
         self.SaveEvolution = Saveevolution
+        self.Plotevolution = Plotevolution
+
 
         self.Nthreads = Nthreads
 
@@ -194,7 +198,7 @@ class Swarm(object):
                                             np.inf if self.Periodic[i]==0 else np.ptp(b)
                                         for i, b in enumerate(self.Model.bounds)])
 
-	# Param indexes where periodicity happens
+    # Param indexes where periodicity happens
         self.Periodic_params = np.where(self.Periodic == 1)[0]
 
         self.BoundsArray = np.array(self.Model.bounds)
@@ -344,7 +348,7 @@ class Swarm(object):
         """
         # Periodic boundary conditions
         self.Points[:,self.Periodic_params] = self.BoundsArray[self.Periodic_params,0] + np.mod(self.Points[:,self.Periodic_params]-self.BoundsArray[self.Periodic_params,0],self.PeriodicParamRanges[self.Periodic_params])
-	    
+
         # Mask for points that are out of range
         upper_mask_indices = np.where((self.Points - self.BoundsArray[:,1])>0)
         lower_mask_indices = np.where((self.Points - self.BoundsArray[:,0])<0)
@@ -352,14 +356,14 @@ class Swarm(object):
         # Reflective boundary conditions (positions)
         self.Points[upper_mask_indices] = self.BoundsArray[upper_mask_indices[1],1] - np.abs(self.Points[upper_mask_indices] - self.BoundsArray[upper_mask_indices[1],1])
         self.Points[lower_mask_indices] = self.BoundsArray[lower_mask_indices[1],0] + np.abs(self.Points[lower_mask_indices] - self.BoundsArray[lower_mask_indices[1],0])
-	
+
         # Clipping positions (to make extra sure that all params are in range)
         self.Points = np.clip(self.Points, a_min=self.BoundsArray[:,0], a_max=self.BoundsArray[:,1])
 
         # Reflective boundary conditions (velocities)
         self.Velocities[upper_mask_indices] *= -1
         self.Velocities[lower_mask_indices] *= -1
-	
+
 
 
     def PSO_VelocityRule(self):
@@ -552,7 +556,7 @@ class Swarm(object):
         Resume swarm from a checkpoint pickle file
         """
         resume_file = os.path.join(self.Output, "PySO_resume.pkl")
-        with open(pickle_file, "rb") as f:
+        with open(resume_file, "rb") as f:
             obj = pickle.load(f)
         self.__dict__.clear()
         self.__dict__.update(obj.__dict__)
@@ -606,6 +610,10 @@ class Swarm(object):
     def ContinueCondition_Hybrid(self):
         """
         When continue condition ceases to be satisfied the evolution stops
+
+        Hybrid continue condition: If either the number of iterations is above the maximum number of iterations
+            or the best known swarm value has not improved in self.Convergence_testing_num_iterations, terminate
+            the swarm
         """
 
         continue_evolution = True
@@ -625,10 +633,10 @@ class Swarm(object):
     def CreateEvolutionHistoryFile(self):
         """
         Create a file to store the evolution history of the swarm
-        Insert header line
         """
-        history_file_path = os.path.join(self.Output, "SwarmEvolutionHistory.dat")
 
+        # Checks if a file already exists in the outdir file path
+        history_file_path = os.path.join(self.Output, "SwarmEvolutionHistory.dat")
         assert not os.path.isfile(history_file_path), "Swarm evolution file already exists"
 
         # header string
@@ -659,40 +667,46 @@ class Swarm(object):
             file.close()
 
 
-    def PlotSwarmEvolution(self):
-        """
-        Various plots showing the swarm evolution
-        """
-        history_file_path = os.path.join(self.Output, "SwarmEvolutionHistory.dat")
-        swarm_points = np.loadtxt(history_file_path, skiprows=1, delimiter=',')
-
-        palette = sns.color_palette("hls", self.NumParticles)
-        plt.figure()
-        # Function values of each swarm point
-        for i in range(self.NumParticles):
-            traj = np.array(swarm_points[i::self.NumParticles])
-            plt.plot(self.nPeriodicCheckpoint*np.arange(len(traj)),
-                     traj[:,-1],'-', marker='o', markersize=3, color=palette[i], alpha=0.5)
-
-        plt.xlabel("Iteration")
-        plt.ylabel("Function Values")
-        outfile = os.path.join(self.Output, "FunctionValues.png")
-        plt.savefig(outfile)
-        plt.clf()
-
-        # Trajectory for each pair of params
-        for j, name_x in enumerate(self.Model.names):
-            for name_y in self.Model.names[j+1:]:
-                plt.figure()
-                for i in range(self.NumParticles):
-                    traj = np.array(swarm_points[i::self.NumParticles])
-                    plt.plot(traj[:,1+self.Model.names.index(name_x)], traj[:,1+self.Model.names.index(name_y)],
-                             '-', marker='o', markersize=3, color=palette[i], alpha=0.5)
-                plt.xlabel(name_x)
-                plt.ylabel(name_y)
-                outfile = os.path.join(self.Output, "EvolutionTrajectory_{0}_{1}.png".format(name_x, name_y))
-                plt.savefig(outfile)
-                plt.clf()
+    # def PlotSwarmEvolution(self):
+    #     """
+    #     Various plots showing the swarm evolution.
+    #
+    #     WARNING: Plotting the whole swarm evolution including the pairplots gets extremely
+    #         expensive for large number of iterations and/or points.
+    #     """
+    #     history_file_path = os.path.join(self.Output, "SwarmEvolutionHistory.dat")
+    #     swarm_points = np.loadtxt(history_file_path, skiprows=1, delimiter=',')
+    #
+    #     palette = sns.color_palette("hls", self.NumParticles)
+    #     plt.figure()
+    #
+    #     # Function values of each swarm point
+    #     for i in range(self.NumParticles):
+    #         traj = np.array(swarm_points[i::self.NumParticles])
+    #         plt.plot(self.nPeriodicCheckpoint*np.arange(len(traj)),
+    #                  traj[:,-1],'-', marker='o', markersize=3, color=palette[i], alpha=0.5)
+    #
+    #     plt.xlabel("Iteration")
+    #     plt.ylabel("Function Values")
+    #     outfile = os.path.join(self.Output, "FunctionValues.png")
+    #     plt.savefig(outfile)
+    #     plt.clf()
+    #
+    #
+    #     # TODO: Don't waste time plotting duplicates ie dont plot x vs y plot after plotting y vs x
+    #     # Trajectory for each pair of params
+    #     for j, name_x in enumerate(self.Model.names):
+    #         for name_y in self.Model.names[j+1:]:
+    #             plt.figure()
+    #             for i in range(self.NumParticles):
+    #                 traj = np.array(swarm_points[i::self.NumParticles])
+    #                 plt.plot(traj[:,1+self.Model.names.index(name_x)], traj[:,1+self.Model.names.index(name_y)],
+    #                          '-', marker='o', markersize=3, color=palette[i], alpha=0.5)
+    #             plt.xlabel(name_x)
+    #             plt.ylabel(name_y)
+    #             outfile = os.path.join(self.Output, "EvolutionTrajectory_{0}_{1}.png".format(name_x, name_y))
+    #             plt.savefig(outfile)
+    #             plt.clf()
 
     def Run(self, segmenting=False):
         """
@@ -719,8 +733,9 @@ class Swarm(object):
 
                 if self.SaveEvolution: self.SaveSwarmEvolution()
 
-        self.SaveFinalResults()
-        if self.SaveEvolution: self.PlotSwarmEvolution()
+        self.SaveFinalResults
+
+        if self.Plotevolution : self.PlotSwarmEvolution()
 
 
 

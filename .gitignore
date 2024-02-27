@@ -7,3 +7,4 @@ examples/MWE_swarm/*
 **/.ipynb_checkpoints
 **/__pycache__
 dist/
+.idea
