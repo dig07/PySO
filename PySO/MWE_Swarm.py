@@ -1,11 +1,8 @@
 import numpy as np
 from pathos.multiprocessing import ProcessingPool as Pool
-
 import os
 import pickle
-
 import seaborn as sns
-
 import matplotlib.pyplot as plt
 
 
@@ -335,13 +332,6 @@ class Swarm(object):
             # Calculate initial function value spread for switch condition
             self.Spreads.append(np.ptp(self.Values))
 
-    def QuadraticWindow(self, x):
-        """
-        A very simple quadratic window function
-        """
-        return 4. * x * (1.-x)
-
-
     def EnforceBoundaries(self):
         """
         Boundary conditions on the edge of the search region
@@ -603,8 +593,9 @@ class Swarm(object):
     def ContinueCondition_Vanilla(self):
         """
         When continue condition ceases to be satisfied the evolution stops
+
+        Continue condition: If either the number of iterations is above the maximum number of iterations
         """
-        spread = np.ptp(self.Values)
         return (self.EvolutionCounter<self.MaxIter )
 
     def ContinueCondition_Hybrid(self):
@@ -667,46 +658,46 @@ class Swarm(object):
             file.close()
 
 
-    # def PlotSwarmEvolution(self):
-    #     """
-    #     Various plots showing the swarm evolution.
-    #
-    #     WARNING: Plotting the whole swarm evolution including the pairplots gets extremely
-    #         expensive for large number of iterations and/or points.
-    #     """
-    #     history_file_path = os.path.join(self.Output, "SwarmEvolutionHistory.dat")
-    #     swarm_points = np.loadtxt(history_file_path, skiprows=1, delimiter=',')
-    #
-    #     palette = sns.color_palette("hls", self.NumParticles)
-    #     plt.figure()
-    #
-    #     # Function values of each swarm point
-    #     for i in range(self.NumParticles):
-    #         traj = np.array(swarm_points[i::self.NumParticles])
-    #         plt.plot(self.nPeriodicCheckpoint*np.arange(len(traj)),
-    #                  traj[:,-1],'-', marker='o', markersize=3, color=palette[i], alpha=0.5)
-    #
-    #     plt.xlabel("Iteration")
-    #     plt.ylabel("Function Values")
-    #     outfile = os.path.join(self.Output, "FunctionValues.png")
-    #     plt.savefig(outfile)
-    #     plt.clf()
-    #
-    #
-    #     # TODO: Don't waste time plotting duplicates ie dont plot x vs y plot after plotting y vs x
-    #     # Trajectory for each pair of params
-    #     for j, name_x in enumerate(self.Model.names):
-    #         for name_y in self.Model.names[j+1:]:
-    #             plt.figure()
-    #             for i in range(self.NumParticles):
-    #                 traj = np.array(swarm_points[i::self.NumParticles])
-    #                 plt.plot(traj[:,1+self.Model.names.index(name_x)], traj[:,1+self.Model.names.index(name_y)],
-    #                          '-', marker='o', markersize=3, color=palette[i], alpha=0.5)
-    #             plt.xlabel(name_x)
-    #             plt.ylabel(name_y)
-    #             outfile = os.path.join(self.Output, "EvolutionTrajectory_{0}_{1}.png".format(name_x, name_y))
-    #             plt.savefig(outfile)
-    #             plt.clf()
+    def PlotSwarmEvolution(self):
+        """
+        Various plots showing the swarm evolution.
+
+        WARNING: Plotting the whole swarm evolution including the pairplots gets extremely
+            expensive for large number of iterations and/or points.
+        """
+        history_file_path = os.path.join(self.Output, "SwarmEvolutionHistory.dat")
+        swarm_points = np.loadtxt(history_file_path, skiprows=1, delimiter=',')
+
+        palette = sns.color_palette("hls", self.NumParticles)
+        plt.figure()
+
+        # Function values of each swarm point
+        for i in range(self.NumParticles):
+            traj = np.array(swarm_points[i::self.NumParticles])
+            plt.plot(self.nPeriodicCheckpoint*np.arange(len(traj)),
+                     traj[:,-1],'-', marker='o', markersize=3, color=palette[i], alpha=0.5)
+
+        plt.xlabel("Iteration")
+        plt.ylabel("Function Values")
+        outfile = os.path.join(self.Output, "FunctionValues.png")
+        plt.savefig(outfile)
+        plt.clf()
+
+
+        # TODO: Don't waste time plotting duplicates ie dont plot x vs y plot after plotting y vs x
+        # Trajectory for each pair of params
+        for j, name_x in enumerate(self.Model.names):
+            for name_y in self.Model.names[j+1:]:
+                plt.figure()
+                for i in range(self.NumParticles):
+                    traj = np.array(swarm_points[i::self.NumParticles])
+                    plt.plot(traj[:,1+self.Model.names.index(name_x)], traj[:,1+self.Model.names.index(name_y)],
+                             '-', marker='o', markersize=3, color=palette[i], alpha=0.5)
+                plt.xlabel(name_x)
+                plt.ylabel(name_y)
+                outfile = os.path.join(self.Output, "EvolutionTrajectory_{0}_{1}.png".format(name_x, name_y))
+                plt.savefig(outfile)
+                plt.clf()
 
     def Run(self, segmenting=False):
         """
@@ -733,8 +724,7 @@ class Swarm(object):
 
                 if self.SaveEvolution: self.SaveSwarmEvolution()
 
-        self.SaveFinalResults
-
+        self.SaveFinalResults()
         if self.Plotevolution : self.PlotSwarmEvolution()
 
 

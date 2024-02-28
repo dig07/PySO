@@ -132,7 +132,6 @@ class HierarchicalSwarmHandler(object):
         # Parameter names
         self.Model_axis_names = self.Hierarchical_models[1].names
 
-
         # Number of dimensions
         self.Ndim = len(self.Model_axis_names)
 
@@ -172,7 +171,7 @@ class HierarchicalSwarmHandler(object):
         # Output directory
         self.Output = Output
 
-        # If we have given then swarm names, otherwise default to numbered list
+        # If we have given the swarm names, otherwise default to numbered list
         self.Swarm_names = Swarm_names
         if self.Swarm_names == None: self.Swarm_names = np.arange(self.NumSwarms) # Defaults to numbered list of swarms
 
@@ -340,7 +339,7 @@ class HierarchicalSwarmHandler(object):
         # Feature_array - Particle positions, function values, not all components (Specially not ones well measured)
 
         clustering_parameter_positions = np.array([np.take(self.frozen_swarms[swarm_index].Points,self.clustering_indices,axis=1) for swarm_index
-                               in self.frozen_swarms.keys()])
+                               in self.frozen_swarms.keys()],dtype=object)
 
         clustering_parameter_positions = np.concatenate(clustering_parameter_positions)
 
@@ -357,13 +356,10 @@ class HierarchicalSwarmHandler(object):
         K, memberships = Clustering(clustering_features,min_membership=self.clustering_min_membership,max_clusters=self.clustering_max_clusters)
 
 
-        total_particle_positions = np.array([self.frozen_swarms[swarm_index].Points for swarm_index
+        total_particle_positions = np.vstack([self.frozen_swarms[swarm_index].Points for swarm_index
                                in self.frozen_swarms.keys()])
-        total_particle_velocities = np.array([self.frozen_swarms[swarm_index].Velocities for swarm_index
+        total_particle_velocities = np.vstack([self.frozen_swarms[swarm_index].Velocities for swarm_index
                                in self.frozen_swarms.keys()])
-
-        total_particle_velocities = np.concatenate(total_particle_velocities)
-        total_particle_positions = np.concatenate(total_particle_positions)
 
         print('Reinitiating swarms with Omega: ',self.Omegas[self.Hierarchical_model_counter+1],
               ' PhiP: ',self.PhiPs[self.Hierarchical_model_counter+1],
@@ -391,11 +387,9 @@ class HierarchicalSwarmHandler(object):
             # Re-distribute particles into a NEW swarm, ie all redistributing particles go into this new swarm (This may not be a good idea in the end)
 
             # Get all positions from all frozen swarms, which at this stage is ALL swarms (from previous segment)
-            parameter_positions = np.array(
+            parameter_positions = np.vstack(
                 [self.frozen_swarms[swarm_index].Points for swarm_index
                  in self.frozen_swarms.keys()])
-
-            parameter_positions = np.concatenate(parameter_positions)
 
             # Distribute the new swarms positions basically using the centre point of all the current swarms
             cov = np.cov(parameter_positions.T)
@@ -522,6 +516,7 @@ class HierarchicalSwarmHandler(object):
 
         # Sets up multiprocessing pool for parallel function computations
         newswarm.Pool = Pool(self.Swarm_kwargs['Nthreads'])
+        #TODO: Check that I have actually closed out the old pool?
 
         return (newswarm)
 
@@ -614,7 +609,7 @@ class HierarchicalSwarmHandler(object):
         Save the final results to file
         """
         final_swarm_positions = np.concatenate([self.frozen_swarms[swarm_index].Points for swarm_index in list(self.frozen_swarms.keys())])
-        final_swarm_values = np.concatenate(np.array([self.frozen_swarms[swarm_index].Values for swarm_index in list(self.frozen_swarms.keys())]))
+        final_swarm_values = np.hstack([self.frozen_swarms[swarm_index].Values for swarm_index in list(self.frozen_swarms.keys())])
         final_swarm_positions_filename = os.path.join(self.Output, "final_swarm_positions.txt")
         final_swarm_values_filename = os.path.join(self.Output, "final_swarm_values.txt")
 
