@@ -207,7 +207,7 @@ class Swarm(object):
             self.velocity_clipping_function = self.velocity_clipping
             self.velocity_minimum_factor = Velocity_minimum_factor
             self.velocity_min = Velocity_min
-            if self.velocity_min == None:
+            if np.all(self.velocity_min == None):
                 self.velocity_min = np.ptp(self.BoundsArray, axis=1) / self.velocity_minimum_factor
     
         elif Velocity_clipping_or_rescale == 'Rescale':

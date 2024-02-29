@@ -24,6 +24,7 @@ class HierarchicalSwarmHandler(object):
                  Mh_fraction = 0.0,
                  Swarm_kwargs={},
                  Output = './',
+                 Minimum_velocities=None,
                  Nperiodiccheckpoint = 10,
                  Swarm_names = None,
                  Verbose = False,
@@ -69,6 +70,9 @@ class HierarchicalSwarmHandler(object):
             dictionary of common arguments between all swarms
         Output: str
             folder in which to save output [defaults to './']
+        Minimum_velocities: list, list of arrays or None
+            Minimum velocities for every hierarchical segment [defaults to None]
+            If None, uses the default setting for MWE swarms at each hierarchical level
         nPeriodicCheckpoint: int
             number of iterations between printing checkpoints [defaults to 10]
             (Note the swarm will checkpoint its position on every iteration, needed for sampling case)
@@ -197,6 +201,23 @@ class HierarchicalSwarmHandler(object):
         self.max_particles_per_swarm = Max_particles_per_swarm
         if self.max_particles_per_swarm == None: self.max_particles_per_swarm = int(self.NumParticlesPerSwarm/10)
 
+
+        # Minimum velocities ladder
+        if np.all(Minimum_velocities) != None:
+
+            # If minimum velocities only given for each dimension
+            if len(Minimum_velocities) == self.Ndim:
+                self.Minimum_velocities = [np.array(Minimum_velocities)]*len(self.Hierarchical_models)
+
+            # If minimum velocities provided for each dimension for each hierarchical level
+            elif len(Minimum_velocities) == len(self.Hierarchical_models):
+                self.Minimum_velocities = Minimum_velocities
+
+            #TODO: deal with this sensibly
+            # If nothing provided then make all the minimum velocities 0
+            else:
+                self.Minimum_velocities = [0] * len(self.Hierarchical_models)
+
         # Initialise swarms
         self.InitialiseSwarms()
 
@@ -236,7 +257,7 @@ class HierarchicalSwarmHandler(object):
         # self.Swarms contains all the swarms.
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
-                                                            **self.Swarm_kwargs)
+                                                            Velocity_min=self.Minimum_velocities[0],**self.Swarm_kwargs)
                        for swarm_index in self.Swarm_names}
 
         # Computed stability number to check for convergence criteria (might be pointless)
@@ -466,11 +487,13 @@ class HierarchicalSwarmHandler(object):
             PhiP = self.PhiPs[self.Hierarchical_model_counter + 1]
             PhiG = self.PhiGs[self.Hierarchical_model_counter + 1]
             MH_fraction = self.MH_fractions[self.Hierarchical_model_counter + 1]
+            Velocity_min = self.Minimum_velocities[self.Hierarchical_model_counter + 1]
+
 
         num_particles = positions.shape[0]
 
         newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
-                         Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction , **self.Swarm_kwargs)
+                         Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,**self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions
