@@ -10,11 +10,11 @@ from PySO.Clustering_Swarms import Clustering
 from .MWE_Swarm import Swarm as Swarm
 
 try:
-    # print('Defaulting to torch.multiprocessing')
+    print('Defaulting to torch.multiprocessing')
     from torch.multiprocessing import Pool, set_start_method
     set_start_method('spawn',force=True)
 except: 
-    # print('PyTorch not installed, not using torch.multiprocessing, using pathos.multiprocessing instead')
+    print('PyTorch not installed, not using torch.multiprocessing, using pathos.multiprocessing instead')
     from pathos.multiprocessing import ProcessingPool as Pool
 
 class HierarchicalSwarmHandler(object):
