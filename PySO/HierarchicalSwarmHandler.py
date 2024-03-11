@@ -1,7 +1,6 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from pathos.multiprocessing import ProcessingPool as Pool
 import warnings
 import copy
 import dill as pickle
@@ -10,7 +9,13 @@ from .Model import Model
 from PySO.Clustering_Swarms import Clustering
 from .MWE_Swarm import Swarm as Swarm
 
-
+try:
+    # print('Defaulting to torch.multiprocessing')
+    from torch.multiprocessing import Pool, set_start_method
+    set_start_method('spawn',force=True)
+except: 
+    # print('PyTorch not installed, not using torch.multiprocessing, using pathos.multiprocessing instead')
+    from pathos.multiprocessing import ProcessingPool as Pool
 
 class HierarchicalSwarmHandler(object):
 
@@ -43,7 +48,8 @@ class HierarchicalSwarmHandler(object):
                  Clustering_min_membership = 5,
                  Clustering_max_clusters = 70,
                  Tol = 1.0e-2,
-                 Convergence_testing_num_iterations = 50):
+                 Convergence_testing_num_iterations = 50,
+                 Nthreads = 1):
         """
 
         REQUIRED INPUTS
@@ -53,7 +59,7 @@ class HierarchicalSwarmHandler(object):
         NumSwarms: int
             Number of Swarms to initialise.
         NumParticlesPerSwarm: list of ints,
-            list containing number of particles to be assigned to each swarm. #
+            list containing number of particles to be assigned to each swarm.
 
 
         OPTIONAL INPUTS
@@ -113,6 +119,9 @@ class HierarchicalSwarmHandler(object):
             the minimum improvement on functionvalue for each swarm that we class as not stalled [defaults to 1e-2]
         Convergence_testing_num_iterations: int
             If best swarm value has not improved over this many last iterations (improved past Tol) [defaults to 50]
+        Nthreads: int 
+            Number of threads to use for parallel processing [defaults to 1]
+            Note: One global processor pool is used for all the swarms. This is to avoid the overhead of creating and destroying pools for each swarm.
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -218,6 +227,9 @@ class HierarchicalSwarmHandler(object):
             else:
                 self.Minimum_velocities = [0] * len(self.Hierarchical_models)
 
+        # Number of threads to use for parallel processing (In one global processor pool for all the swarms)
+        self.Nthreads = Nthreads
+
         # Initialise swarms
         self.InitialiseSwarms()
 
@@ -248,7 +260,6 @@ class HierarchicalSwarmHandler(object):
             print('Resuming from file {}'.format(resume_file))
             self.ResumeFromCheckpoint()
 
-
     def InitialiseSwarms(self):
         """
         Initialise the swarm points, values and velocities
@@ -257,7 +268,7 @@ class HierarchicalSwarmHandler(object):
         # self.Swarms contains all the swarms.
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
-                                                            Velocity_min=self.Minimum_velocities[0],**self.Swarm_kwargs)
+                                                            Velocity_min=self.Minimum_velocities[0],Nthreads=self.Nthreads,**self.Swarm_kwargs)
                        for swarm_index in self.Swarm_names}
 
         # Computed stability number to check for convergence criteria (might be pointless)
@@ -395,6 +406,9 @@ class HierarchicalSwarmHandler(object):
         if stability_num<=0:
             warnings.warn('Stability number is less than 0, initiated swarm is not guranteed to converge!')
 
+        #Make new pool
+        self.Global_Pool = Pool(self.Nthreads)      
+
         # Create each swarm
         for swarm_index in range(K):
 
@@ -402,8 +416,13 @@ class HierarchicalSwarmHandler(object):
               swarm_particle_velocities = total_particle_velocities[np.where(memberships == swarm_index)[0]]
               self.Swarms[swarm_index] = self.Reinitiate_swarm(swarm_particle_positions, swarm_particle_velocities)
 
+              # Force all swarms to use the same global pool
+              self.Swarms[swarm_index].Pool = self.Global_Pool  
+
         # Check to make sure that we arent on the first segment and there are actually particles to be redistributed (from veto)
         # Extra swarm for redistributed particles
+
+
         if self.Hierarchical_model_counter != 0 and num_particles_redistributed>0:
             # Re-distribute particles into a NEW swarm, ie all redistributing particles go into this new swarm (This may not be a good idea in the end)
 
@@ -423,6 +442,10 @@ class HierarchicalSwarmHandler(object):
             # Extra redistributed swarm
             self.Swarms[K] = self.Reinitiate_swarm(redistributed_particle_positions, redistributed_particle_velocities)
 
+            # Force all swarms to use the same global pool
+            self.Swarms[K].Pool = self.Global_Pool  
+
+            
         # Empty the frozen swarms dict as we are done with the old swarms
         self.frozen_swarms = {}
         self.AllStalled = False
@@ -538,7 +561,8 @@ class HierarchicalSwarmHandler(object):
         newswarm.BestKnownSwarmValue = np.max(newswarm.BestKnownValues)
 
         # Sets up multiprocessing pool for parallel function computations
-        newswarm.Pool = Pool(self.Swarm_kwargs['Nthreads'])
+        # TODO Make maxtasksperchild a variable in the swarm kwargs
+        # newswarm.Pool = Pool(self.Swarm_kwargs['Nthreads'])
         #TODO: Check that I have actually closed out the old pool?
 
         return (newswarm)
@@ -656,7 +680,14 @@ class HierarchicalSwarmHandler(object):
 
     def check_hierarchical_step(self):
         """
-        Checks if any of the swarms meet the condition to switch to the next model
+        Checks if any of the swarms meet the condition to switch to the next model.
+
+        This method iterates over the swarms and checks if any of them have reached the stall condition. If a swarm has
+        stalled, it freezes the swarm and removes it from the active swarms. If all swarms have stalled, it either finishes
+        the process if it's the last model or switches to the next segment.
+
+        Returns:
+            None
         """
 
         # If all swarms are not stalled yet
@@ -687,9 +718,11 @@ class HierarchicalSwarmHandler(object):
                 if self.Hierarchical_model_counter+1 == len(self.Hierarchical_models):
                     print('\n All swarms stalled on the last model, finishing up!')
                     self.swarm_stepping_done = True
-                    for swarm in self.Swarms:
-                        swarm.Pool.close()
-                        swarm.Pool.join()
+                    # for swarm in self.Swarms:
+                    #     swarm.Pool.close()
+                    #     swarm.Pool.join()
+                    self.Global_Pool.close()
+                    
 
                 else:
                     print('\n All swarms stalled! Switching segments from ', str(self.Hierarchical_models[self.Hierarchical_model_counter].segment_number),
@@ -714,8 +747,15 @@ class HierarchicalSwarmHandler(object):
     def Run(self):
         """
         Run optimisation/sampling for all swarms
+
+        This method runs the optimization or sampling process for all swarms in the hierarchical swarm handler.
+        It iteratively evolves the swarms until the stopping condition is met or the swarm stepping is done.
+        It also handles saving evolution history and periodic checkpoints based on the specified parameters.
+
+        Returns:
+            None
         """
-        if self.SaveEvolution and self.EvolutionCounter==0:
+        if self.SaveEvolution and self.EvolutionCounter == 0:
             self.CreateEvolutionHistoryFile()
             self.SaveEnsembleEvolution()
 
@@ -723,10 +763,12 @@ class HierarchicalSwarmHandler(object):
             self.EvolveSwarms()
 
             if self.EvolutionCounter % self.nPeriodicCheckpoint == 0:
+                if self.Verbose:
+                    self.PrintStatus()
 
-                if self.Verbose: self.PrintStatus()
+                if self.SaveEvolution:
+                    self.SaveEnsembleEvolution()
 
-                if self.SaveEvolution: self.SaveEnsembleEvolution()
             self.check_hierarchical_step()
 
         self.SaveFinalResults()

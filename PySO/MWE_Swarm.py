@@ -5,6 +5,14 @@ import pickle
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+try:
+    # print('Defaulting to torch.multiprocessing')
+    from torch.multiprocessing import Pool, set_start_method
+    set_start_method('spawn',force=True)
+except: 
+    # print('PyTorch not installed, not using torch.multiprocessing, using pathos.multiprocessing instead')
+    from pathos.multiprocessing import ProcessingPool as Pool
+
 
 class Swarm(object):
 
@@ -240,8 +248,9 @@ class Swarm(object):
             self.ContinueCondition = self.ContinueCondition_Hybrid
         else:
             self.ContinueCondition = self.ContinueCondition_Vanilla
+        self.log_posterior = None        
 
-    def MyFunc(self, p):
+    def MyFunc(self,p):
         """
         The function to be maximised.
         Converts array into dictionary and calls self.Model.log_posterior
@@ -256,8 +265,8 @@ class Swarm(object):
         log_posterior: float
         """
         par_dict = dict(zip(self.Model.names, p))
-        log_posterior = self.Model.log_likelihood(par_dict)
-        return log_posterior
+        self.log_posterior = self.Model.log_likelihood(par_dict)
+        return self.log_posterior
 
 
     def InitialiseSwarm(self):
@@ -317,7 +326,7 @@ class Swarm(object):
                     pass
 
             # Initialise the particle function values
-            self.Pool = Pool(self.Nthreads)
+            self.Pool = Pool(self.Nthreads,maxtasksperchild=2000)
             self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
 
             # Initialise each particle's best known position to initial position
@@ -727,6 +736,27 @@ class Swarm(object):
         self.SaveFinalResults()
         if self.Plotevolution : self.PlotSwarmEvolution()
 
+    def __getstate__(self):
+        """
+        Get the state of the object. For mp+pool to work, the object must be picklable.
 
+        Returns:
+            dict: A dictionary containing the object's state.
+                - 'log_posterior': The log posterior value.
+                - 'Model': The model object.
+        """
+        return {'log_posterior': self.log_posterior,
+                'Model': self.Model}
 
+    def __setstate__(self, state):
+        """
+        Set the object's state from the state dictionary. For mp+pool to work, the object must be picklable.
 
+        Parameters:
+        state (dict): The state dictionary containing the object's state.
+
+        Returns:
+        None
+        """
+        self.log_posterior = state['log_posterior']
+        self.Model = state['Model']
