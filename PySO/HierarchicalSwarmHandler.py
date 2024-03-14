@@ -722,6 +722,7 @@ class HierarchicalSwarmHandler(object):
                     #     swarm.Pool.close()
                     #     swarm.Pool.join()
                     self.Global_Pool.close()
+                    self.Global_Pool.join()
                     
 
                 else:
