@@ -414,6 +414,8 @@ class HierarchicalSwarmHandler(object):
 
               swarm_particle_positions = total_particle_positions[np.where(memberships == swarm_index)[0]]
               swarm_particle_velocities = total_particle_velocities[np.where(memberships == swarm_index)[0]]
+
+              # Note swarm velocities are not carried over to next segment if self.redraw_velocities_at_segmentation is True
               self.Swarms[swarm_index] = self.Reinitiate_swarm(swarm_particle_positions, swarm_particle_velocities)
 
               # Force all swarms to use the same global pool
@@ -489,6 +491,7 @@ class HierarchicalSwarmHandler(object):
             initial positions for new swarm
         velocities: array (number of particles, self.Ndim)
             initial velocities for new swarm particles
+                Only use this for new velocities if self.redraw_velocities_at_segmentation is True
 
         OPTIONAL INPUTS:
         ------
@@ -541,7 +544,7 @@ class HierarchicalSwarmHandler(object):
             # Work out the peak to peak of the positions in each axis.
             ptp_vel_bounds = np.ptp(np.array([np.min(positions,axis=0),np.max(positions,axis=0)]).T,axis=1)
 
-            # draw velocities from U[-ptp/2,ptp/2]
+            # draw velocities from U[-ptp/2,ptp/2] for each axis
             newswarm.Velocities = (ptp_vel_bounds) * np.random.random_sample(size=(num_particles,self.Ndim)) - ptp_vel_bounds/2
 
         # Carry over points from previous models optimization
@@ -559,11 +562,6 @@ class HierarchicalSwarmHandler(object):
         # Best point and swarm value
         newswarm.BestKnownSwarmPoint = newswarm.BestKnownPoints[np.argmax(newswarm.BestKnownValues)]
         newswarm.BestKnownSwarmValue = np.max(newswarm.BestKnownValues)
-
-        # Sets up multiprocessing pool for parallel function computations
-        # TODO Make maxtasksperchild a variable in the swarm kwargs
-        # newswarm.Pool = Pool(self.Swarm_kwargs['Nthreads'])
-        #TODO: Check that I have actually closed out the old pool?
 
         return (newswarm)
 

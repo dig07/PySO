@@ -5,6 +5,6 @@ examples/hierarchical_results/*.txt
 examples/High_dimensional_MH/
 examples/MWE_swarm/*
 **/.ipynb_checkpoints
-**/__pycache__
+**/__pycache__*
 dist/
 .idea
