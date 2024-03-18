@@ -47,6 +47,7 @@ class HierarchicalSwarmHandler(object):
                  Redraw_velocities_at_segmentation = False,
                  Clustering_min_membership = 5,
                  Clustering_max_clusters = 70,
+                 Veto_function = None,
                  Tol = 1.0e-2,
                  Convergence_testing_num_iterations = 50,
                  Nthreads = 1):
@@ -114,7 +115,10 @@ class HierarchicalSwarmHandler(object):
         clustering_min_membership: int
             minimum number of particles in each swarm [defaults to 5]
         clustering_max_clusters: int
-            maximum number of clusters to test for the clustering [defaults to 70]
+            maximum number of clusters to test for the clustering [defaults to 70]#
+        Veto_function: function or NoneType
+            Function to be used for vetoing swarms, generally should accept the swarms best parameters and return a boolean. 
+                Vetos are generally defined as some function of the position in parameter space and the segment number. 
         Tol: float
             the minimum improvement on functionvalue for each swarm that we class as not stalled [defaults to 1e-2]
         Convergence_testing_num_iterations: int
@@ -210,6 +214,8 @@ class HierarchicalSwarmHandler(object):
         self.max_particles_per_swarm = Max_particles_per_swarm
         if self.max_particles_per_swarm == None: self.max_particles_per_swarm = int(self.NumParticlesPerSwarm/10)
 
+        # Veto function to be used for vetoing swarms, generally should accept the swarms best parameters and return a boolean.
+        self.Veto_function = Veto_function
 
         # Minimum velocities ladder
         if np.all(Minimum_velocities) != None:
@@ -328,8 +334,25 @@ class HierarchicalSwarmHandler(object):
 
         for swarm_index in list(self.frozen_swarms.keys()):
             num_particles_in_swarm =  self.frozen_swarms[swarm_index].Points.shape[0]
+
+            # if we actually have a veto function
+            if self.Veto_function != None:
+                # Need parmaeter space position position to compute SNR (coherent)
+                # Need best known swarm value (Upsilon) to compute the false alarm rate 
+                # Need the segment number to compute the veto
+                veto = self.Veto_function(self.frozen_swarms[swarm_index].BestKnownSwarmPoint, 
+                                          self.frozen_swarms[swarm_index].BestKnownSwarmValue, 
+                                          self.Hierarchical_models[self.Hierarchical_model_counter].segment_number)
+                if veto: 
+                    print('Swarm ',swarm_index,' vetoed by veto funtion, redistributing...')
+                    # Remove it from the frozen swarms, just add up how many particles need to be redistributed
+                    num_particles_redistributed += self.frozen_swarms[swarm_index].Points.shape[0]
+                    self.frozen_swarms.pop(swarm_index)
+    
+
+            # If not using a veto function, use the fitness veto fraction
             # Check if the peak being explored is insignificant
-            if (self.frozen_swarms[swarm_index].BestKnownSwarmValue - lowest_ensemble_val) < self.fitness_veto_fraction*(self.BestKnownEnsembleValue-lowest_ensemble_val):
+            elif (self.frozen_swarms[swarm_index].BestKnownSwarmValue - lowest_ensemble_val) < self.fitness_veto_fraction*(self.BestKnownEnsembleValue-lowest_ensemble_val):
                 print('Swarm ',swarm_index,' below the fitness threshold, redistributing...')
                 # Remove it from the frozen swarms, just add up how many particles need to be redistributed
                 num_particles_redistributed += self.frozen_swarms[swarm_index].Points.shape[0]
@@ -339,6 +362,7 @@ class HierarchicalSwarmHandler(object):
 
                 # Add up how many particles need to be redistributed
                 num_particles_redistributed += int(self.frozen_swarms[swarm_index].Points.shape[0] - self.max_particles_per_swarm)
+
                 # Find the lowest fitness particles
                 lowest_fitness_particle_indices = np.argsort(self.frozen_swarms[swarm_index].Values)[:(self.frozen_swarms[swarm_index].Points.shape[0] -
                                                                                                        self.max_particles_per_swarm)]
@@ -442,6 +466,7 @@ class HierarchicalSwarmHandler(object):
             redistributed_particle_velocities = np.random.multivariate_normal(velocity_mean, cov, size=num_particles_redistributed)
 
             # Extra redistributed swarm
+            # Note swarm velocities are not carried over to next segment if self.redraw_velocities_at_segmentation is True
             self.Swarms[K] = self.Reinitiate_swarm(redistributed_particle_positions, redistributed_particle_velocities)
 
             # Force all swarms to use the same global pool
