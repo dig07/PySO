@@ -236,6 +236,12 @@ class HierarchicalSwarmHandler(object):
         # Number of threads to use for parallel processing (In one global processor pool for all the swarms)
         self.Nthreads = Nthreads
 
+
+        #Make new pool for parallel computations
+            # This pool will be used throughout the entire run
+        self.Global_Pool = Pool(self.Nthreads)    
+
+
         # Initialise swarms
         self.InitialiseSwarms()
 
@@ -274,7 +280,7 @@ class HierarchicalSwarmHandler(object):
         # self.Swarms contains all the swarms.
         self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
-                                                            Velocity_min=self.Minimum_velocities[0],Nthreads=self.Nthreads,**self.Swarm_kwargs)
+                                                            Velocity_min=self.Minimum_velocities[0],Provided_pool=self.Global_Pool,**self.Swarm_kwargs)
                        for swarm_index in self.Swarm_names}
 
         # Computed stability number to check for convergence criteria (might be pointless)
@@ -430,9 +436,6 @@ class HierarchicalSwarmHandler(object):
         if stability_num<=0:
             warnings.warn('Stability number is less than 0, initiated swarm is not guranteed to converge!')
 
-        #Make new pool
-        self.Global_Pool = Pool(self.Nthreads)      
-
         # Create each swarm
         for swarm_index in range(K):
 
@@ -457,7 +460,7 @@ class HierarchicalSwarmHandler(object):
                 [self.frozen_swarms[swarm_index].Points for swarm_index
                  in self.frozen_swarms.keys()])
 
-            # Distribute the new swarms positions basically using the centre point of all the current swarms
+            # Distribute the new swarms positions basically using the centre point of all the current swarms (This also might not be a good idea in the end)
             cov = np.cov(parameter_positions.T)
             position_mean = np.mean(parameter_positions,axis=0)
             velocity_mean = np.zeros(self.Ndim)
@@ -544,7 +547,8 @@ class HierarchicalSwarmHandler(object):
         num_particles = positions.shape[0]
 
         newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
-                         Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,**self.Swarm_kwargs)
+                         Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,Provided_pool=self.Global_Pool,
+                         **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
         newswarm.Points = positions

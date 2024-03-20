@@ -30,6 +30,7 @@ class Swarm(object):
                  Periodic = None,
                  Initialguess = None,
                  Nthreads = 1,
+                 Provided_pool = None, # Pool object for multiprocessing
                  Seed = None,
                  Nperiodiccheckpoint = 10,
                  Output = './',
@@ -98,6 +99,8 @@ class Swarm(object):
         (Other parameters)
         Nthreads: int [defaults to 1]
             Number of multiprocessing threads to use.
+        Provided_pool: Pool object [Defaults to None]
+            Pool object for multiprocessing. If pool not provided, creates a new pool. If pool provided, uses that pool.
         Seed: int
             random Seed [defaults to None]
         Nperiodiccheckpoint: int
@@ -191,6 +194,12 @@ class Swarm(object):
 
 
         self.Nthreads = Nthreads
+
+        # If Pool is not provided, create a new Pool
+        if Provided_pool is None:
+            self.Pool = Pool(self.Nthreads)
+        if Provided_pool is not None:
+            self.Pool = Provided_pool
 
         if Periodic is None:
             self.Periodic = np.array([ 0 for i in range(self.Ndim)])
@@ -325,7 +334,6 @@ class Swarm(object):
                     pass
 
             # Initialise the particle function values
-            self.Pool = Pool(self.Nthreads,maxtasksperchild=2000)
             self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
 
             # Initialise each particle's best known position to initial position
