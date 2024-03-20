@@ -551,7 +551,10 @@ class HierarchicalSwarmHandler(object):
                          **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
-        newswarm.Points = positions
+
+        # New points clipped at the boundaries
+        newswarm.Points = np.clip(positions,a_min=np.array(self.Hierarchical_models[self.Hierarchical_model_counter + 1].bounds)[:,0],
+                                  a_max=np.array(self.Hierarchical_models[self.Hierarchical_model_counter + 1].bounds)[:,1])
 
         if self.kick_velocities == True:
             # Kick the reinitialised velocities
