@@ -243,7 +243,11 @@ class Swarm(object):
         if self.MH_fraction == 0:
             # The velocity rule is the PSO standard rule when no MH
             self.VelocityRule = self.PSO_VelocityRule
+        elif self.MH_fraction == 1: 
+            # The velocity rule is the Affine Invariant MC rule
+            self.VelocityRule = self.ParallelAffineInvariantMC_VelocityRule_
         else:
+            # Some combinaton of the 2
             self.VelocityRule = self.Hybrid_VelocityRule
 
 
