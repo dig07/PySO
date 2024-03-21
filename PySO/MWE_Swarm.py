@@ -3,6 +3,7 @@ import os
 import pickle
 import seaborn as sns
 import matplotlib.pyplot as plt
+from PySO.affine_invariant_utils import sample_g, ParallelStretchMove_InternalFunction
 
 try:
     print('Defaulting to torch.multiprocessing')
@@ -11,7 +12,6 @@ try:
 except: 
     print('PyTorch not installed, not using torch.multiprocessing, using pathos.multiprocessing instead')
     from pathos.multiprocessing import ProcessingPool as Pool
-
 
 class Swarm(object):
 
@@ -236,7 +236,7 @@ class Swarm(object):
             self.clip_lower_velocity = Clip_lower_velocity
             self.clip_upper_velocity = Clip_upper_velocity
 
-        #Wether to reinitialise velocities from initial guess or from v_min array provided by user
+        # Whether to reinitialise velocities from initial guess or from v_min array provided by user
         self.reinitialise_velocities_from_initial_guess = Reinitialise_velocities_from_initial_guess
 
 
@@ -464,6 +464,115 @@ class Swarm(object):
 
 
         return(clipped_velocities)
+
+    def AffineInvariantMC_VelocityRule(self):
+        """
+        Implements Alg.2 from D. Foreman-Mackey et al. 2013 (arXiv:1202.3665).
+        """
+        velocities = np.zeros((self.NumParticles,self.Ndim))
+
+        # loop over particles
+        for particle_index in range(self.NumParticles):
+
+            # pick a particle from the complementary ensemble
+            j = np.random.choice( list(np.arange(particle_index))
+                                 + list(np.arange(particle_index+1, self.NumParticles)) )
+            if j>particle_index:
+                Xj = self.Points[j] # use the PREVIOUS position of particle from complementary ensemble
+            else:
+                Xj = self.Points[j]+velocities[j] # use the NEW position of particle from complementary ensemble
+
+            # draw random variable z ~ g(z)
+            z = sample_g()
+
+            # Proposal point
+            Y = Xj + z*(self.Points[particle_index]-Xj)
+            
+            # acceptance probability
+            logq = (self.Ndim-1)*np.log(z) + self.MyFunc(Y) - self.MyFunc(self.Points[particle_index])
+
+            # decide if we accept or reject
+            r = np.random.uniform()
+            in_bounds = ( np.all(self.BoundsArray[:,0]<Y) and np.all(Y<self.BoundsArray[:,1]) )
+            accept = ( (np.log(r)<logq) and in_bounds )
+
+            if accept:
+                velocities[particle_index] = Y - self.Points[particle_index] 
+            else: # reject
+                pass
+
+        return velocities
+
+    def ParallelAffineInvariantMC_VelocityRule(self):
+        """
+        Implements Alg.3 from D. Foreman-Mackey et al. 2013 (arXiv:1202.3665).
+        """
+        velocities = np.zeros((self.NumParticles,self.Ndim))
+
+        Khalf = self.NumParticles//2
+        indices = [np.arange(0, Khalf),
+                   np.arange(Khalf+1, self.NumParticles)]
+
+        # loop over the two halves of the swarm 
+        for i in [0,1]:
+
+            noti = 0 if i==1 else 1
+
+            my_half_swarm = self.Points[indices[i]]
+            other_half_swarm = self.Points[indices[noti]]
+
+            offset = 0 if i==0 else Khalf
+
+            args = [(particle_id, my_half_swarm, other_half_swarm, self.MyFunc, self.BoundsArray, velocities) 
+                    for particle_id in range(len(my_half_swarm))]
+
+            V = np.array(self.Pool.starmap(ParallelStretchMove_InternalFunction, args))
+            
+            velocities[indices[i]] = V
+
+        return velocities
+
+    def ParallelAffineInvariantMC_VelocityRule_(self):
+        """
+        Implements Alg.3 from D. Foreman-Mackey et al. 2013 (arXiv:1202.3665).
+        """
+        velocities = np.zeros((self.NumParticles,self.Ndim))
+
+        Khalf = self.NumParticles//2
+        indices = [np.arange(0, Khalf),
+                   np.arange(Khalf+1, self.NumParticles)]
+
+        # loop over the two halves of the swarm 
+        for i in [0,1]:
+            
+            # loop over particles in this swarm half
+            for particle_index in indices[i]:
+
+                # pick a particle from the other half of the swarm
+                j = np.random.choice( indices[0 if i==1 else 1] )
+                Xj = self.Points[j] 
+
+                # draw random variable z ~ g(z)
+                z = sample_g()
+
+                # Proposal point
+                Y = Xj + z*(self.Points[particle_index]-Xj)
+
+                # acceptance probability
+                logq = (self.Ndim-1)*np.log(z) + self.MyFunc(Y) - self.MyFunc(self.Points[particle_index])
+
+                # decide if we accept or reject
+                r = np.random.uniform()
+                in_bounds = ( np.all(self.BoundsArray[:,0]<Y) and np.all(Y<self.BoundsArray[:,1]) )
+                accept = ( (np.log(r)<logq) and in_bounds )
+
+                if accept:
+                    velocities[particle_index] = Y - self.Points[particle_index] 
+                else: # reject
+                    pass
+
+        return velocities
+
     def Hybrid_VelocityRule(self):
         """
         The PSO rule for updating the velocities including a MH MCMC part to it
@@ -474,9 +583,6 @@ class Swarm(object):
             velocities clipped to the minimum velocity for each dimension
 
         """
-
-
-
         MH_velocities = np.zeros((self.NumParticles,self.Ndim))
 
         for particle_index in range(self.NumParticles):
@@ -527,7 +633,7 @@ class Swarm(object):
         # Enforce point to be within bounds
         self.EnforceBoundaries()
 
-        # # Update function values
+        # Update function values
         self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
 
 
