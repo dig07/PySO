@@ -67,9 +67,9 @@ def sample_g(size=None, a=2.):
     $$ Var[z] = \frac{(a-1)^2 (a (4 a+7)+4)}{45 a^2} $$
     respectively.
 
-    Because of the mild ~z^{-1/2} dependence of the PDF the PDF is 
-    relatively flat across its entire range of support; the ratio of the
-    maximum to the minimum value of the PDF across this range is a.
+    Because of its mild ~z^{-1/2} dependence the PDF is relatively 
+    flat across its entire range of support; the ratio of the maximum 
+    to the minimum value of the PDF across this range is a.
 
     Choosing a larger value of the scale parameter increases both the 
     mean and the range of support of the distribution, thereby making it
