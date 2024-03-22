@@ -16,19 +16,21 @@ def ParallelStretchMove_InternalFunction(idx, my_half_swarm, other_half_swarm, F
     # Proposal point
     Y = Xj + z*(my_half_swarm[idx]-Xj)
 
-    # acceptance probability
-    logq = (Ndim-1)*np.log(z) + Func(Y) - Func(my_half_swarm[idx])
-
-    # decide if we accept or reject
-    r = np.random.uniform()
+    # Check if in search bounds
     in_bounds = ( np.all(BoundsArray[:,0]<Y) and np.all(Y<BoundsArray[:,1]) )
-    accept = ( (np.log(r)<logq) and in_bounds )
 
-    if accept:
-        velocity = Y - my_half_swarm[idx]
-    else: # reject
-        pass
+    if in_bounds:
+        # acceptance probability
+        logq = (Ndim-1)*np.log(z) + Func(Y) - Func(my_half_swarm[idx])
 
+        # decide if we accept or reject
+        r = np.random.uniform()
+    
+        accept = ( np.log(r)<logq )
+
+        if accept:
+            velocity = Y - my_half_swarm[idx]
+    
     return velocity
 
 
