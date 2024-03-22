@@ -46,20 +46,35 @@ def invcdf_GW10(u, a=2.):
 
     RETURNS
     -------
-    x: like u
-        random samples x~g
+    z: like u
+        random samples z~g
     """
-    return (1.+(a-1.)*u)**2 / a
+    z = (1.+(a-1.)*u)**2 / a
+    return z
 
-def sample_g(size=None, a=2):
+def sample_g(size=None, a=2.):
     """
     Return random samples from the distribution g(z) defined in 
     Eq.10 of D. Foreman-Mackey et al. 2013 (arXiv:1202.3665).
 
+    A random variable 1/a < z < a from this distribution has a PDF
+    $$ g(z) = \frac{\sqrt{a/z}}{2(a-1)}, $$
+    and the PDF is zero for values outside of the allowed range.
+
+    The mean and variance of this distribution are
+    $$ E[z] = \frac{a^2+a+1}{3 a} $$
+    and 
+    $$ Var[z] = \frac{(a-1)^2 (a (4 a+7)+4)}{45 a^2} $$
+    respectively.
+
+    Choosing a larger value of the scale parameter increases both the 
+    mean and the range of support of the distribution, thereby making it
+    more likely that a particle will propose a large step outside of the 
+    current region of parameter space occupied by the swarm. 
+    
     INPUTS
     ------
     size: int
-
         defaults to None, in which case a single sample is return
     a: float
         the scale parameter a, defaults to 2
@@ -71,4 +86,5 @@ def sample_g(size=None, a=2):
         else if size is an int, then array of that length
     """
     u = np.random.uniform(size=size)
-    return invcdf_GW10(u, a=a)
+    samples = invcdf_GW10(u, a=a)
+    return samples
