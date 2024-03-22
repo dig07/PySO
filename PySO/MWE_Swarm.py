@@ -47,7 +47,8 @@ class Swarm(object):
                  Delta_max = 0.3,
                  Delta_min = 0.0001,
                  Velocity_clipping_or_rescale= 'Clip',
-                 Reinitialise_velocities_from_initial_guess=True):
+                 Reinitialise_velocities_from_initial_guess=True,
+                 affine_invariant_a = 2.0):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -137,6 +138,10 @@ class Swarm(object):
              rescale to some minimum and or maximum velocity magnitudes.
         Reinitialise_velocities_from_initial_guess: boolean
             Wether to reinitialise velocities from initial guess (or if false, initialise from v_min array provided by user) [defaults to True]
+        affine_invariant_a: float
+            Parameter for the affine invariant MCMC velocity rule. Controls how large of a step the sampler takes, 
+                Acceptance rate goes down if a goes up [defaults to 2.0] 
+        
         """
 
         self.Ndim = len(Model.names)
@@ -261,6 +266,9 @@ class Swarm(object):
         else:
             self.ContinueCondition = self.ContinueCondition_Vanilla
         self.log_posterior = None        
+
+        # Only used for the affine invariant MCMC velocity rule
+        self.affine_invariant_a = affine_invariant_a    
 
     def MyFunc(self,p):
         """
@@ -487,7 +495,7 @@ class Swarm(object):
                 Xj = self.Points[j]+velocities[j] # use the NEW position of particle from complementary ensemble
 
             # draw random variable z ~ g(z)
-            z = sample_g()
+            z = sample_g(a=self.affine_invariant_a)
 
             # Proposal point
             Y = Xj + z*(self.Points[particle_index]-Xj)
@@ -527,7 +535,7 @@ class Swarm(object):
 
             offset = 0 if i==0 else Khalf
 
-            args = [(particle_id, my_half_swarm, other_half_swarm, self.MyFunc, self.BoundsArray, velocities) 
+            args = [(particle_id, my_half_swarm, other_half_swarm, self.MyFunc, self.BoundsArray, velocities, self.affine_invariant_a) 
                     for particle_id in range(len(my_half_swarm))]
 
             V = np.array(self.Pool.starmap(ParallelStretchMove_InternalFunction, args))
@@ -557,7 +565,7 @@ class Swarm(object):
                 Xj = self.Points[j] 
 
                 # draw random variable z ~ g(z)
-                z = sample_g()
+                z = sample_g(a=self.affine_invariant_a)
 
                 # Proposal point
                 Y = Xj + z*(self.Points[particle_index]-Xj)

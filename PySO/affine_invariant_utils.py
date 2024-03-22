@@ -1,6 +1,6 @@
 import numpy as np
 
-def ParallelStretchMove_InternalFunction(idx, my_half_swarm, other_half_swarm, Func, BoundsArray, velocities):
+def ParallelStretchMove_InternalFunction(idx, my_half_swarm, other_half_swarm, Func, BoundsArray, velocities,a):
 
     Nparticles_other, Ndim = other_half_swarm.shape
 
@@ -11,7 +11,7 @@ def ParallelStretchMove_InternalFunction(idx, my_half_swarm, other_half_swarm, F
     Xj = other_half_swarm[j] 
 
     # draw random variable z ~ g(z)
-    z = sample_g()
+    z = sample_g(a=a)
 
     # Proposal point
     Y = Xj + z*(my_half_swarm[idx]-Xj)
