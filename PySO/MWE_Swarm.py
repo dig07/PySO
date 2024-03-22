@@ -491,20 +491,22 @@ class Swarm(object):
 
             # Proposal point
             Y = Xj + z*(self.Points[particle_index]-Xj)
-            
-            # acceptance probability
-            logq = (self.Ndim-1)*np.log(z) + self.MyFunc(Y) - self.MyFunc(self.Points[particle_index])
 
-            # decide if we accept or reject
-            r = np.random.uniform()
+            # Check if proposed point in search bounds
             in_bounds = ( np.all(self.BoundsArray[:,0]<Y) and np.all(Y<self.BoundsArray[:,1]) )
-            accept = ( (np.log(r)<logq) and in_bounds )
 
-            if accept:
-                velocities[particle_index] = Y - self.Points[particle_index] 
-            else: # reject
-                pass
+            if in_bounds:           
+                # acceptance probability
+                logq = (self.Ndim-1)*np.log(z) + self.MyFunc(Y) - self.MyFunc(self.Points[particle_index])
 
+                # decide if we accept or reject
+                r = np.random.uniform()
+            
+                accept = (np.log(r)<logq)
+
+                if accept:
+                    velocities[particle_index] = Y - self.Points[particle_index] 
+                    
         return velocities
 
     def ParallelAffineInvariantMC_VelocityRule(self):
