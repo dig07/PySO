@@ -499,20 +499,22 @@ class Swarm(object):
 
             # Proposal point
             Y = Xj + z*(self.Points[particle_index]-Xj)
-            
-            # acceptance probability
-            logq = (self.Ndim-1)*np.log(z) + self.MyFunc(Y) - self.MyFunc(self.Points[particle_index])
 
-            # decide if we accept or reject
-            r = np.random.uniform()
+            # Check if proposed point in search bounds
             in_bounds = ( np.all(self.BoundsArray[:,0]<Y) and np.all(Y<self.BoundsArray[:,1]) )
-            accept = ( (np.log(r)<logq) and in_bounds )
 
-            if accept:
-                velocities[particle_index] = Y - self.Points[particle_index] 
-            else: # reject
-                pass
+            if in_bounds:           
+                # acceptance probability
+                logq = (self.Ndim-1)*np.log(z) + self.MyFunc(Y) - self.MyFunc(self.Points[particle_index])
 
+                # decide if we accept or reject
+                r = np.random.uniform()
+            
+                accept = (np.log(r)<logq)
+
+                if accept:
+                    velocities[particle_index] = Y - self.Points[particle_index] 
+                    
         return velocities
 
     def ParallelAffineInvariantMC_VelocityRule(self):
@@ -546,7 +548,8 @@ class Swarm(object):
 
     def ParallelAffineInvariantMC_VelocityRule_(self):
         """
-        Implements Alg.3 from D. Foreman-Mackey et al. 2013 (arXiv:1202.3665).
+        Implements the parallel Alg.3 from D. Foreman-Mackey et al. 2013 (arXiv:1202.3665)
+        BUT it implements in without any parallelisation.
         """
         velocities = np.zeros((self.NumParticles,self.Ndim))
 
@@ -570,19 +573,21 @@ class Swarm(object):
                 # Proposal point
                 Y = Xj + z*(self.Points[particle_index]-Xj)
 
-                # acceptance probability
-                logq = (self.Ndim-1)*np.log(z) + self.MyFunc(Y) - self.MyFunc(self.Points[particle_index])
-
-                # decide if we accept or reject
-                r = np.random.uniform()
+                # Check is proposed point in search bounds
                 in_bounds = ( np.all(self.BoundsArray[:,0]<Y) and np.all(Y<self.BoundsArray[:,1]) )
-                accept = ( (np.log(r)<logq) and in_bounds )
 
-                if accept:
-                    velocities[particle_index] = Y - self.Points[particle_index] 
-                else: # reject
-                    pass
+                if in_bounds:
+                    # acceptance probability
+                    logq = (self.Ndim-1)*np.log(z) + self.MyFunc(Y) - self.MyFunc(self.Points[particle_index])
 
+                    # decide if we accept or reject
+                    r = np.random.uniform()
+                
+                    accept = (np.log(r)<logq) 
+
+                    if accept:
+                        velocities[particle_index] = Y - self.Points[particle_index] 
+                        
         return velocities
 
     def Hybrid_VelocityRule(self):
