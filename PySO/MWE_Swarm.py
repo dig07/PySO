@@ -29,7 +29,7 @@ class Swarm(object):
                  Maxiter = 1.0e6,
                  Periodic = None,
                  Initialguess = None,
-                 Nthreads = 1,
+                 Nthreads = None,
                  Provided_pool = None, # Pool object for multiprocessing
                  Seed = None,
                  Nperiodiccheckpoint = 10,
@@ -98,8 +98,8 @@ class Swarm(object):
 
 
         (Other parameters)
-        Nthreads: int [defaults to 1]
-            Number of multiprocessing threads to use.
+        Nthreads: int [defaults to None]
+            Number of multiprocessing threads to use. If None, use a serial version.
         Provided_pool: Pool object [Defaults to None]
             Pool object for multiprocessing. If pool not provided, creates a new pool. If pool provided, uses that pool.
         Seed: int
@@ -201,10 +201,14 @@ class Swarm(object):
         self.Nthreads = Nthreads
 
         # If Pool is not provided, create a new Pool
-        if Provided_pool is None:
+        if Provided_pool is None and self.Nthreads is not None:
+            self.parallel = True
             self.Pool = Pool(self.Nthreads)
         if Provided_pool is not None:
+            self.parallel = True
             self.Pool = Provided_pool
+        if self.Nthreads is None and Provided_pool is None:
+            self.parallel = False
 
         if Periodic is None:
             self.Periodic = np.array([ 0 for i in range(self.Ndim)])
@@ -346,7 +350,10 @@ class Swarm(object):
                     pass
 
             # Initialise the particle function values
-            self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
+            if self.parallel:
+                self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
+            else: 
+                self.Values = np.array( list(map(self.MyFunc, self.Points)) )
 
             # Initialise each particle's best known position to initial position
             self.BestKnownPoints = self.Points.copy()
@@ -539,7 +546,7 @@ class Swarm(object):
 
             args = [(particle_id, my_half_swarm, other_half_swarm, self.MyFunc, self.BoundsArray, velocities, self.affine_invariant_a) 
                     for particle_id in range(len(my_half_swarm))]
-
+            # NOT FIXED YET
             V = np.array(self.Pool.starmap(ParallelStretchMove_InternalFunction, args))
             
             velocities[indices[i]] = V
@@ -651,7 +658,10 @@ class Swarm(object):
         self.EnforceBoundaries()
 
         # Update function values
-        self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
+        if self.parallel:
+            self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
+        else:
+            self.Values = np.array( list(map(self.MyFunc, self.Points)) )
 
 
         # Update particle's best known position

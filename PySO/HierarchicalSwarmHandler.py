@@ -50,7 +50,7 @@ class HierarchicalSwarmHandler(object):
                  Veto_function = None,
                  Tol = 1.0e-2,
                  Convergence_testing_num_iterations = 50,
-                 Nthreads = 1):
+                 Nthreads = None):
         """
 
         REQUIRED INPUTS
@@ -124,8 +124,9 @@ class HierarchicalSwarmHandler(object):
         Convergence_testing_num_iterations: int
             If best swarm value has not improved over this many last iterations (improved past Tol) [defaults to 50]
         Nthreads: int 
-            Number of threads to use for parallel processing [defaults to 1]
+            Number of threads to use for parallel processing [defaults to None]
             Note: One global processor pool is used for all the swarms. This is to avoid the overhead of creating and destroying pools for each swarm.
+            If None, defaults to a serial version. 
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -239,7 +240,12 @@ class HierarchicalSwarmHandler(object):
 
         #Make new pool for parallel computations
             # This pool will be used throughout the entire run
-        self.Global_Pool = Pool(self.Nthreads)    
+
+        if self.Nthreads != None:
+            self.parallel = True
+            self.Global_Pool = Pool(self.Nthreads)
+        else:
+            self.parallel = False
 
 
         # Initialise swarms
@@ -278,19 +284,17 @@ class HierarchicalSwarmHandler(object):
 
         """
         # self.Swarms contains all the swarms.
-        self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
+        if self.parallel == False:
+            self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
-                                                            Velocity_min=self.Minimum_velocities[0],Provided_pool=self.Global_Pool,**self.Swarm_kwargs)
-                       for swarm_index in self.Swarm_names}
+                                                            Velocity_min=self.Minimum_velocities[0],Nthreads=None,**self.Swarm_kwargs)
+                        for swarm_index in self.Swarm_names}
 
-        # Computed stability number to check for convergence criteria (might be pointless)
-        stability_num = self.stability_check(self.Omegas[0],
-                                             self.PhiPs[0],
-                                             self.PhiGs[0])
-        print('Stability number:', stability_num)
-
-        if stability_num <= 0:
-            warnings.warn('Stability number is less than 0, initiated swarm is not guranteed to converge!')
+        else:
+            self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
+                                                                Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
+                                                                Velocity_min=self.Minimum_velocities[0],Provided_pool=self.Global_Pool,**self.Swarm_kwargs)
+                        for swarm_index in self.Swarm_names}
 
         initial_best_positions = []
         initial_max_func_vals = []
@@ -427,15 +431,6 @@ class HierarchicalSwarmHandler(object):
               ' PhiP: ',self.PhiPs[self.Hierarchical_model_counter+1],
               ' PhiG: ',self.PhiGs[self.Hierarchical_model_counter+1])
 
-        # Stability check for convergence (Might be removed)
-        stability_num = self.stability_check(self.Omegas[self.Hierarchical_model_counter+1],
-                                             self.PhiPs[self.Hierarchical_model_counter+1],
-                                             self.PhiGs[self.Hierarchical_model_counter+1])
-        print('Stability number:', stability_num)
-
-        if stability_num<=0:
-            warnings.warn('Stability number is less than 0, initiated swarm is not guranteed to converge!')
-
         # Create each swarm
         for swarm_index in range(K):
 
@@ -446,7 +441,9 @@ class HierarchicalSwarmHandler(object):
               self.Swarms[swarm_index] = self.Reinitiate_swarm(swarm_particle_positions, swarm_particle_velocities)
 
               # Force all swarms to use the same global pool
-              self.Swarms[swarm_index].Pool = self.Global_Pool  
+              if self.parallel == True:
+                self.Swarms[swarm_index].Pool = self.Global_Pool 
+                
 
         # Check to make sure that we arent on the first segment and there are actually particles to be redistributed (from veto)
         # Extra swarm for redistributed particles
@@ -473,7 +470,9 @@ class HierarchicalSwarmHandler(object):
             self.Swarms[K] = self.Reinitiate_swarm(redistributed_particle_positions, redistributed_particle_velocities)
 
             # Force all swarms to use the same global pool
-            self.Swarms[K].Pool = self.Global_Pool  
+            if self.parallel == True:
+                self.Swarms[swarm_index].Pool = self.Global_Pool 
+            
 
             
         # Empty the frozen swarms dict as we are done with the old swarms
@@ -481,30 +480,6 @@ class HierarchicalSwarmHandler(object):
         self.AllStalled = False
 
         self.Hierarchical_model_counter += 1
-
-    def stability_check(self, Omega, PhiP, PhiG):
-        """
-        Evaluate the stability number to diagnose if the swarm is diverging or converging.
-        Definition of stability number and explaination provided in https://bee22.com/resources/Bergh%202006.pdf (Page 85, Equation 3.21)
-                Omega > 1/2(PhiP + PhiG) − 1    (for guranteed convergence)
-
-        INPUTS:
-        ------
-        Omega: float
-            Inertia weight
-        PhiP: float
-            Personal/Cognitive weight
-        PhiG: float
-            Social weight
-
-        RETURNS:
-        ------
-        stability_number: float
-            Number defining the stability of the swarm being initiated
-        """
-
-        stability_number = Omega+1-1/2*(PhiP+PhiG)
-        return(stability_number)
 
     def Reinitiate_swarm(self,positions,velocities,
                          Omega=None,
@@ -546,9 +521,14 @@ class HierarchicalSwarmHandler(object):
 
         num_particles = positions.shape[0]
 
-        newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
-                         Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,Provided_pool=self.Global_Pool,
-                         **self.Swarm_kwargs)
+        if self.parallel == True: 
+            newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
+                            Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,Provided_pool=self.Global_Pool,
+                            **self.Swarm_kwargs)
+        else:
+            newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
+                Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,Nthreads=None,
+                **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
 
@@ -751,8 +731,9 @@ class HierarchicalSwarmHandler(object):
                     # for swarm in self.Swarms:
                     #     swarm.Pool.close()
                     #     swarm.Pool.join()
-                    self.Global_Pool.close()
-                    self.Global_Pool.join()
+                    if self.parallel:
+                        self.Global_Pool.close()
+                        self.Global_Pool.join()
                     
 
                 else:
