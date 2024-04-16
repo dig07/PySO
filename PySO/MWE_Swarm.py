@@ -48,7 +48,7 @@ class Swarm(object):
                  Delta_min = 0.0001,
                  Velocity_clipping_or_rescale= 'Clip',
                  Reinitialise_velocities_from_initial_guess=True,
-                 affine_invariant_a = 2.0):
+                 Affine_invariant_a = 2.0):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -272,7 +272,7 @@ class Swarm(object):
         self.log_posterior = None        
 
         # Only used for the affine invariant MCMC velocity rule
-        self.affine_invariant_a = affine_invariant_a    
+        self.affine_invariant_a = Affine_invariant_a    
 
     def MyFunc(self,p):
         """
