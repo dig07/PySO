@@ -48,7 +48,9 @@ class Swarm(object):
                  Delta_min = 0.0001,
                  Velocity_clipping_or_rescale= 'Clip',
                  Reinitialise_velocities_from_initial_guess=True,
-                 Affine_invariant_a = 2.0):
+                 Affine_invariant_a = 2.0,
+                 Constriction = False,
+                 Constriction_kappa = 1.0):
         """
 
         Minimum working example of Particle swarm optimization class.
@@ -140,10 +142,16 @@ class Swarm(object):
             Wether to reinitialise velocities from initial guess (or if false, initialise from v_min array provided by user) [defaults to True]
         affine_invariant_a: float
             Parameter for the affine invariant MCMC velocity rule. Controls how large of a step the sampler takes, 
-                Acceptance rate goes down if a goes up [defaults to 2.0] 
-        
+                Acceptance rate goes down if a goes up [defaults to 2.0]
+        Constriction: Boolean
+            Flag to use constriction factor in PSO velocity rule [defaults to True]
+                Constriction factor derived in https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=985692.
+        Constriction_kappa: float
+            Constriction factor kappa [defaults to 1.0], Only used when Constriction is True, derived in https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=985692.
+                Controls degree of convergence of the swarm. 
+                Note PhiP=PhiG=2, Kappa=1 gives the same velocity rule as the standard PSO rule.
         """
-
+        
         self.Ndim = len(Model.names)
 
         self.Model = Model
@@ -274,6 +282,13 @@ class Swarm(object):
         # Only used for the affine invariant MCMC velocity rule
         self.affine_invariant_a = Affine_invariant_a    
 
+        if Constriction == True:
+            Phi = self.PhiP + self.PhiG
+            if Phi < 4: 
+                assert False, "PhiP + PhiG must be greater than 4 for the constriction factor to work"
+            self.Constriction_factor = (2*Constriction_kappa)/np.abs(2-(Phi)-np.sqrt(Phi**2 -4*Phi))
+        else: 
+            self.Constriction_factor = 1
     def MyFunc(self,p):
         """
         The function to be maximised.
@@ -405,7 +420,7 @@ class Swarm(object):
         best_known_swarm_point = np.tile(
                               self.BestKnownSwarmPoint, self.NumParticles
                                   ).reshape((self.NumParticles, self.Ndim))
-        unclipped_velocities = (self.Omega * self.Velocities
+        unclipped_velocities = self.Constriction_factor*(self.Omega * self.Velocities
                + self.PhiP * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( self.BestKnownPoints - self.Points )
                + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points)
                # line "jitters" each particle towards another random particle in the swarm to prevent being stuck in local maxima
