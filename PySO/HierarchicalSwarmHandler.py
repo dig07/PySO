@@ -50,7 +50,9 @@ class HierarchicalSwarmHandler(object):
                  Veto_function = None,
                  Tol = 1.0e-2,
                  Convergence_testing_num_iterations = 50,
-                 Nthreads = None):
+                 Nthreads = None,
+                 Constriction_ladder = None,
+                 Constriction_kappa_ladder = None):
         """
 
         REQUIRED INPUTS
@@ -126,7 +128,12 @@ class HierarchicalSwarmHandler(object):
         Nthreads: int 
             Number of threads to use for parallel processing [defaults to None]
             Note: One global processor pool is used for all the swarms. This is to avoid the overhead of creating and destroying pools for each swarm.
-            If None, defaults to a serial version. 
+            If None, defaults to a serial version.
+        Constriction_ladder: None or list
+            Constriction factor for each hierarchical model, defaults to None. If none set to False for each segment. 
+        Constriction_kappa_ladder: None or list
+            Constriction kappa factor for each hierarchical model, defaults to None. If none set to 1.0 for each segment. 
+                Only used if Constriction_factor for that given swarm is true. 
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -217,6 +224,16 @@ class HierarchicalSwarmHandler(object):
 
         # Veto function to be used for vetoing swarms, generally should accept the swarms best parameters and return a boolean.
         self.Veto_function = Veto_function
+        
+        # Constriction ladder
+        if Constriction_ladder != None:
+            self.Constriction_ladder = Constriction_ladder
+            self.Constriction_kappa_ladder = Constriction_kappa_ladder
+        else:
+            self.Constriction_ladder = [False]*len(self.Hierarchical_models)
+            self.Constriction_kappa_ladder = [1.0]*len(self.Hierarchical_models)
+
+
 
         # Minimum velocities ladder
         if np.all(Minimum_velocities) != None:
@@ -287,13 +304,15 @@ class HierarchicalSwarmHandler(object):
         if self.parallel == False:
             self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
-                                                            Velocity_min=self.Minimum_velocities[0],Nthreads=None,**self.Swarm_kwargs)
+                                                            Velocity_min=self.Minimum_velocities[0],Nthreads=None,Constriction=self.Constriction_ladder[0],
+                                                            Constriction_kappa=self.Constriction_kappa_ladder[0],**self.Swarm_kwargs)
                         for swarm_index in self.Swarm_names}
 
         else:
             self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                                 Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
-                                                                Velocity_min=self.Minimum_velocities[0],Provided_pool=self.Global_Pool,**self.Swarm_kwargs)
+                                                                Velocity_min=self.Minimum_velocities[0],Provided_pool=self.Global_Pool,Constriction=self.Constriction_ladder[0],
+                                                                Constriction_kappa=self.Constriction_kappa_ladder[0],**self.Swarm_kwargs)
                         for swarm_index in self.Swarm_names}
 
         initial_best_positions = []
@@ -525,10 +544,12 @@ class HierarchicalSwarmHandler(object):
         if self.parallel == True: 
             newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
                             Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,Provided_pool=self.Global_Pool,
+                            Constriction=self.Constriction_ladder[self.Hierarchical_model_counter + 1],Constriction_kappa=self.Constriction_kappa_ladder[self.Hierarchical_model_counter + 1],
                             **self.Swarm_kwargs)
         else:
             newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
                 Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,Nthreads=None,
+                Constriction=self.Constriction_ladder[self.Hierarchical_model_counter + 1],Constriction_kappa=self.Constriction_kappa_ladder[self.Hierarchical_model_counter + 1],
                 **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
