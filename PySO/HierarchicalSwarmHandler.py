@@ -446,19 +446,20 @@ class HierarchicalSwarmHandler(object):
                 
 
         # Check to make sure that we arent on the first segment and there are actually particles to be redistributed (from veto)
-        # Extra swarm for redistributed particles
 
 
         if self.Hierarchical_model_counter != 0 and num_particles_redistributed>0:
-            # Re-distribute particles into a NEW swarm, ie all redistributing particles go into this new swarm (This may not be a good idea in the end)
+            # Redistribute particles into the best swarm we currently are tracking
+            #       Do this by placed our "redistributed swarm" on top of the best swarm
 
-            # Get all positions from all frozen swarms, which at this stage is ALL swarms (from previous segment)
-            parameter_positions = np.vstack(
-                [self.frozen_swarms[swarm_index].Points for swarm_index
-                 in self.frozen_swarms.keys()])
+             # Find the best swarm
+            best_swarm_index = np.argmax([self.Swarms[swarm_index].BestKnownSwarmValue for swarm_index in list(self.Swarms.keys())])
 
-            # Distribute the new swarms positions basically using the centre point of all the current swarms (This also might not be a good idea in the end)
-            cov = np.cov(parameter_positions.T)
+            # Its particle positions
+            parameter_positions = self.Swarms[best_swarm_index].Points
+
+            # Distribute the new swarms positions basically using the centre point of all the current swarms (This might not be a good idea in the end)
+            cov = np.cov(parameter_positions.T)/2
             position_mean = np.mean(parameter_positions,axis=0)
             velocity_mean = np.zeros(self.Ndim)
 
