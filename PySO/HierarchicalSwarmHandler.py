@@ -44,7 +44,7 @@ class HierarchicalSwarmHandler(object):
                  Kick_velocities = True,
                  Fitness_veto_fraction = 0.05,
                  Max_particles_per_swarm = None,
-                 Redraw_velocities_at_segmentation = False,
+                 Velocity_at_segmentation = 'Transfer',
                  Clustering_min_membership = 5,
                  Clustering_max_clusters = 70,
                  Veto_function = None,
@@ -112,8 +112,11 @@ class HierarchicalSwarmHandler(object):
             Fraction of Best swarm position below which we throw away new swarms [defaults to 0.05]
         max_particles_per_swarm: integer
             Maximum number of particles per swarm [defaults to int(total_num_particles/10)]
-        redraw_velocities_at_segmentation: Boolean
-            Boolean flag indicating if the velocities should be redrawn from swarm position ranges at each segmentation step [defaults to False]
+        Velocity_at_segmentation: Either 'Transfer', 'Zero' or 'Redraw'.
+            Sets rule for initial velocities at each segmentation. 
+                If 'Transfer', transfer velocities from previous swarm to new swarm
+                If 'Zero', set initial velocities to zero for new swarm
+                If 'Redraw', draw new velocities from the new swarms particle positions using a normal distribution
         clustering_min_membership: int
             minimum number of particles in each swarm [defaults to 5]
         clustering_max_clusters: int
@@ -211,9 +214,8 @@ class HierarchicalSwarmHandler(object):
         # If false, use previous particle velocities
         self.kick_velocities = Kick_velocities
 
-        # If true, draw new velocities from the new swarms particle positions using a uniform distribution [ DEFAULTS TO FALSE ]
-        # If false, use previous particle velocities
-        self.redraw_velocities_at_segmentation = Redraw_velocities_at_segmentation
+    
+        self.velocity_at_segmentation = Velocity_at_segmentation
 
         # self.fitness_veto_fraction * best_objective_function_Val below which we throw swarms away (reassign particles to other swarms)
         self.fitness_veto_fraction = Fitness_veto_fraction
@@ -456,7 +458,7 @@ class HierarchicalSwarmHandler(object):
               swarm_particle_positions = total_particle_positions[np.where(memberships == swarm_index)[0]]
               swarm_particle_velocities = total_particle_velocities[np.where(memberships == swarm_index)[0]]
 
-              # Note swarm velocities are not carried over to next segment if self.redraw_velocities_at_segmentation is True
+              # Note swarm velocities are not carried over to next segment if self.velocity_rule_at_segmentation is 'Redraw' or 'Zero'
               self.Swarms[swarm_index] = self.Reinitiate_swarm(swarm_particle_positions, swarm_particle_velocities)
 
               # Force all swarms to use the same global pool
@@ -486,7 +488,7 @@ class HierarchicalSwarmHandler(object):
             redistributed_particle_velocities = np.random.multivariate_normal(velocity_mean, cov, size=num_particles_redistributed)
 
             # Extra redistributed swarm
-            # Note swarm velocities are not carried over to next segment if self.redraw_velocities_at_segmentation is True
+            # Note swarm velocities are not carried over to next segment if self.velocity_rule_at_segmentation is 'Redraw' or 'Zero'
             self.Swarms[K] = self.Reinitiate_swarm(redistributed_particle_positions, redistributed_particle_velocities)
 
             # Force all swarms to use the same global pool
@@ -514,7 +516,7 @@ class HierarchicalSwarmHandler(object):
             initial positions for new swarm
         velocities: array (number of particles, self.Ndim)
             initial velocities for new swarm particles
-                Only use this for new velocities if self.redraw_velocities_at_segmentation is True
+                Only use this for new velocities if self.velocity_rule_at_segmentation is 'Transfer'
 
         OPTIONAL INPUTS:
         ------
@@ -571,9 +573,8 @@ class HierarchicalSwarmHandler(object):
         else:
             newswarm.Velocities = velocities
 
-        ## TODO: Need to merge kick_velocity option with redraw_velocities_at_segmentation since they do very similar things
 
-        if self.redraw_velocities_at_segmentation == True:
+        if self.velocity_at_segmentation == 'Redraw':
 
             # Work out the peak to peak of the positions in each axis.
             ptp_vel_bounds = np.ptp(np.array([np.min(positions,axis=0),np.max(positions,axis=0)]).T,axis=1)
@@ -581,6 +582,13 @@ class HierarchicalSwarmHandler(object):
             # draw velocities from U[-ptp/2,ptp/2] for each axis
             newswarm.Velocities = (ptp_vel_bounds) * np.random.random_sample(size=(num_particles,self.Ndim)) - ptp_vel_bounds/2
 
+        elif self.velocity_at_segmentation == 'Zero':
+
+            # Set all velocities to zero at new swarm 
+            newswarm.Velocities = np.zeros((num_particles,self.Ndim))
+        elif self.velocity_at_segmentation == 'Transfer':
+            # Transfer velocities from previous swarm to new swarm (already done above)
+            pass
         # Carry over points from previous models optimization
         newswarm.BestKnownPoints = copy.deepcopy(newswarm.Points)
 
