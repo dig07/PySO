@@ -4,6 +4,7 @@ import pickle
 import seaborn as sns
 import matplotlib.pyplot as plt
 from PySO.affine_invariant_utils import sample_g, ParallelStretchMove_InternalFunction
+import scipy 
 
 try:
     print('Defaulting to torch.multiprocessing')
@@ -29,6 +30,7 @@ class Swarm(object):
                  Maxiter = 1.0e6,
                  Periodic = None,
                  Initialguess = None,
+                 Initial_placement = 'LHS',
                  Nthreads = None,
                  Provided_pool = None, # Pool object for multiprocessing
                  Seed = None,
@@ -97,6 +99,8 @@ class Swarm(object):
             the first m swarm points will start at these locations
             p1,p2... must be arrays of length Ndim whose entries correspond to Model.names
             or p1,p2... must be dicts with keys Model.names
+        Initial_placement: str (Either 'LHS' or 'Random')
+            Method to place initial guesses in the swarm, choices are 'Random' for random sampling and 'LHS' for Latin Hypercube Sampling [defaults to 'LHS']
 
 
         (Other parameters)
@@ -190,6 +194,9 @@ class Swarm(object):
         self.MaxIter = Maxiter
 
         self.InitialGuess = Initialguess
+        
+        # Initial placement method
+        self.Initial_placement = Initial_placement
 
         self.Seed = Seed
 
@@ -326,16 +333,33 @@ class Swarm(object):
             if self.Seed is not None:
                 np.random.seed(seed=self.Seed)
 
-            # Initialise the particle positions/velocities with random vectors
-            for i in range(self.NumParticles):
-                for j in range(self.Ndim):
+            # Initialise the particle positions/velocities 
 
-                    Low, High = self.Model.bounds[j]
-                    self.Points[i][j] = np.random.uniform(Low, High)
+            if self.Initial_placement == 'Random':
+                for i in range(self.NumParticles):
+                    for j in range(self.Ndim):
 
-                    Range = abs(High-Low)
-                    vLow, vHigh = -Range/5., Range/5. #FIDDLE PARAMETER HERE
-                    self.Velocities[i][j] = np.random.uniform(vLow, vHigh)
+                        Low, High = self.Model.bounds[j]
+                        self.Points[i][j] = np.random.uniform(Low, High)
+
+                        Range = abs(High-Low)
+                        vLow, vHigh = -Range/5., Range/5. #FIDDLE PARAMETER HERE
+                        self.Velocities[i][j] = np.random.uniform(vLow, vHigh)
+
+            elif self.Initial_placement == 'LHS':
+                initial_sampler = scipy.stats.qmc.LatinHypercube(self.Ndim,strength=1)
+                self.Points = initial_sampler.random(n=self.NumParticles)*(np.ptp(np.array(self.Model.bounds),axis=1)) + np.array(self.Model.bounds)[:,0]
+
+                # Still initialise velocities randomly with a fiddle factor. 
+                for i in range(self.NumParticles):
+                    for j in range(self.Ndim):
+
+                        Low, High = self.Model.bounds[j]
+
+                        Range = abs(High-Low)
+                        vLow, vHigh = -Range/5., Range/5. #FIDDLE PARAMETER HERE
+                        self.Velocities[i][j] = np.random.uniform(vLow, vHigh)
+
 
             # If provided, overwrite first M positions with initial guesses
             if self.InitialGuess is not None:
