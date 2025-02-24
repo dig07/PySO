@@ -593,10 +593,17 @@ class HierarchicalSwarmHandler(object):
         newswarm.BestKnownPoints = copy.deepcopy(newswarm.Points)
 
         # Recalculate best personal known values:
-        for i in range(newswarm.NumParticles):
-            # TODO: This be paralellized
-            newswarm.BestKnownValues[i] = newswarm.Model.log_likelihood(
-                dict(zip(newswarm.Model.names, newswarm.Points[i])))
+
+        # Checking for batching
+        if self.Swarm_kwargs.get('batch_optimal_func') is not None and self.Swarm_kwargs.get('batch_optimal_func') is False:
+
+            for i in range(newswarm.NumParticles):
+                # TODO: This be paralellized
+                newswarm.BestKnownValues[i] = newswarm.Model.log_likelihood(
+                    dict(zip(newswarm.Model.names, newswarm.Points[i])))
+        # Batched computation 
+        elif self.Swarm_kwargs.get('batch_optimal_func') is True:
+            newswarm.BestKnownValues = np.array(newswarm.MyFunc(newswarm.Points))
 
         # First values for each particle are by definition their best known values
         newswarm.Values = copy.deepcopy(newswarm.BestKnownValues)
