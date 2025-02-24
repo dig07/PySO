@@ -32,6 +32,7 @@ class Swarm(object):
                  Initialguess = None,
                  Initial_placement = 'LHS',
                  Nthreads = None,
+                 batch_optimal_func = False,
                  Provided_pool = None, # Pool object for multiprocessing
                  Seed = None,
                  Nperiodiccheckpoint = 10,
@@ -214,15 +215,19 @@ class Swarm(object):
 
 
         self.Nthreads = Nthreads
+        self.batch_optimal_func = batch_optimal_func
 
         # If Pool is not provided, create a new Pool
-        if Provided_pool is None and self.Nthreads is not None:
+        if Provided_pool is None and self.Nthreads is not None and self.batch_optimal_func is False:
             self.parallel = True
             self.Pool = Pool(self.Nthreads)
         if Provided_pool is not None:
             self.parallel = True
             self.Pool = Provided_pool
-        if self.Nthreads is None and Provided_pool is None:
+        if self.Nthreads is None and Provided_pool is None and self.batch_optimal_func is False:
+            self.parallel = False
+        # Batched is NOT parallel. 
+        if self.batch_optimal_func is True:
             self.parallel = False
 
         if Periodic is None:
@@ -310,7 +315,11 @@ class Swarm(object):
         -------
         log_posterior: float
         """
-        par_dict = dict(zip(self.Model.names, p))
+        if self.batch_optimal_func == False:
+            par_dict = dict(zip(self.Model.names, p))
+        else:
+            # If batched function 
+            par_dict = dict(zip(self.Model.names, p.T))
         self.log_posterior = self.Model.log_likelihood(par_dict)
         return self.log_posterior
 
@@ -391,8 +400,13 @@ class Swarm(object):
             # Initialise the particle function values
             if self.parallel:
                 self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
-            else: 
-                self.Values = np.array( list(map(self.MyFunc, self.Points)) )
+            else:
+                # If not parallel, but batched
+                if self.batch_optimal_func == True:
+                    self.Values = np.array(self.MyFunc(self.Points))
+                # Not batched or parallel
+                else: 
+                    self.Values = np.array( list(map(self.MyFunc, self.Points)) )
 
             # Initialise each particle's best known position to initial position
             self.BestKnownPoints = self.Points.copy()
@@ -696,11 +710,16 @@ class Swarm(object):
         # Enforce point to be within bounds
         self.EnforceBoundaries()
 
-        # Update function values
+        # Initialise the particle function values
         if self.parallel:
             self.Values = np.array( self.Pool.map(self.MyFunc, self.Points) )
         else:
-            self.Values = np.array( list(map(self.MyFunc, self.Points)) )
+            # If not parallel, but batched
+            if self.batch_optimal_func == True:
+                self.Values = np.array(self.MyFunc(self.Points))
+            # Not batched or parallel
+            else: 
+                self.Values = np.array( list(map(self.MyFunc, self.Points)) )
 
 
         # Update particle's best known position
