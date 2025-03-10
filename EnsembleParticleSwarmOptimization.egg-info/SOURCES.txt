@@ -11,3 +11,4 @@ PySO/MWE_Swarm.py
 PySO/Model.py
 PySO/SwarmHandler.py
 PySO/__init__.py
+PySO/affine_invariant_utils.py

@@ -1,43 +1,37 @@
 Metadata-Version: 2.1
 Name: EnsembleParticleSwarmOptimization
-Version: 0.2.2
+Version: 0.2.3
 Summary: Ensemble of particle swarms together with various velocity rules for function optimization
 Home-page: https://github.com/dig07/PySO
 Author: Christopher Moore and Diganta Bandopadhyay
 Author-email: diganta@star.sr.bham.ac.uk
+License: UNKNOWN
+Description: # PySO
+        Particle swarm optimizer 
+        
+        [![Anaconda-Server Badge](https://anaconda.org/dig07/ensembleparticleswarmoptimization/badges/version.svg)](https://anaconda.org/dig07/ensembleparticleswarmoptimization)
+        [![PyPI version](https://badge.fury.io/py/EnsembleParticleSwarmOptimization.svg)](https://badge.fury.io/py/EnsembleParticleSwarmOptimization)
+        
+        [![Anaconda-Server Badge](https://anaconda.org/dig07/ensembleparticleswarmoptimization/badges/latest_release_date.svg)](https://anaconda.org/dig07/ensembleparticleswarmoptimization)
+        
+        Install with ```pip install EnsembleParticleSwarmOptimization``` or ```conda install -c dig07 ensembleparticleswarmoptimization```
+        
+        Currently under development. 
+        
+        ![Multiple Swarm](examples/hierarchical_results/animation_non_periodic.gif)
+        
+        **Publications**
+        - LISA stellar-mass black hole searches with semicoherent and particle-swarm methods, Phys. Rev. D 108, 084014, [arxiv:2305.18048](https://arxiv.org/abs/2305.18048).
+        - A GPU-accelerated semi-coherent hierarchical search for stellar-mass binary inspiral signals in LISA, Phys. Rev. D 110, 103026, [arXiv:2408.13170](https://arxiv.org/abs/2408.13170)
+        - Searching for stellar-origin binary black holes in LISA Data Challenge 1b: Yorsh, Phys. Rev. D 111, 044039, [arXiv:2412.10501](https://arxiv.org/abs/2412.10501)
+          
+        **Authors**
+        - Diganta Bandopadhyay
+        - [Christopher J. Moore](https://github.com/cjm96)
+        
+Platform: UNKNOWN
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: MIT License
 Classifier: Operating System :: OS Independent
 Requires-Python: >=3
 Description-Content-Type: text/markdown
-Requires-Dist: numpy>=1.15.0
-Requires-Dist: scipy
-Requires-Dist: pandas
-Requires-Dist: matplotlib
-Requires-Dist: scikit-learn
-Requires-Dist: pathos
-Requires-Dist: dill
-Requires-Dist: kneed
-Requires-Dist: seaborn
-Requires-Dist: pillow
-
-# PySO
-Particle swarm optimizer 
-
-[![Anaconda-Server Badge](https://anaconda.org/dig07/ensembleparticleswarmoptimization/badges/version.svg)](https://anaconda.org/dig07/ensembleparticleswarmoptimization)
-[![PyPI version](https://badge.fury.io/py/EnsembleParticleSwarmOptimization.svg)](https://badge.fury.io/py/EnsembleParticleSwarmOptimization)
-
-[![Anaconda-Server Badge](https://anaconda.org/dig07/ensembleparticleswarmoptimization/badges/latest_release_date.svg)](https://anaconda.org/dig07/ensembleparticleswarmoptimization)
-
-Install with ```pip install EnsembleParticleSwarmOptimization``` or ```conda install -c dig07 ensembleparticleswarmoptimization```
-
-Currently under development. 
-
-![Multiple Swarm](examples/hierarchical_results/animation_non_periodic.gif)
-
-**Publications**
-- LISA stellar-mass black hole searches with semicoherent and particle-swarm methods, Phys. Rev. D 108, 084014, [arxiv:2305.18048](https://arxiv.org/abs/2305.18048).
-
-**Authors**
-- Diganta Bandopadhyay
-- [Christopher J. Moore](https://github.com/cjm96)
