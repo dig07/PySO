@@ -704,15 +704,16 @@ class HierarchicalSwarmHandler(object):
         """
         final_swarm_positions = np.concatenate([self.frozen_swarms[swarm_index].Points for swarm_index in list(self.frozen_swarms.keys())])
         final_swarm_values = np.hstack([self.frozen_swarms[swarm_index].Values for swarm_index in list(self.frozen_swarms.keys())])
-        final_swarm_keys = np.array([swarm_index for swarm_index in list(self.frozen_swarms.keys())])
-
+        final_swarm_keys = [[swarm_index]*self.frozen_swarms[swarm_index].NumParticles for swarm_index in list(self.frozen_swarms.keys())]
+        flattened_swarm_indexes = np.array([x for xs in final_swarm_keys for x in xs])
+        
         final_swarm_positions_filename = os.path.join(self.Output, "final_swarm_positions.txt")
         final_swarm_values_filename = os.path.join(self.Output, "final_swarm_values.txt")
         final_swarm_keys_filename = os.path.join(self.Output, "final_swarm_indices.txt")
 
         np.savetxt(final_swarm_positions_filename,final_swarm_positions)
         np.savetxt(final_swarm_values_filename,final_swarm_values)
-        np.savetxt(final_swarm_keys_filename,final_swarm_keys)
+        np.savetxt(final_swarm_keys_filename,flattened_swarm_indexes)
 
         # final_swarm_pickle_filename= os.path.join(self.Output, "final_swarm_pickle.pkl")
         # # Dump final swarms into a pickle file
