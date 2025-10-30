@@ -18,7 +18,6 @@ class Swarm(object):
                  Phip = 0.2,         # PSO rule parameter
                  Phig = 0.2,        # PSO rule parameter
                  Mh_fraction= 0.0,
-                 Jitter_weight = 0.0,
                  Tol = 1.0e-3,
                  Automatic_convergence_testing = False,
                  Convergence_testing_num_iterations = 50,
@@ -29,7 +28,6 @@ class Swarm(object):
                  Nthreads = None,
                  batch_optimal_func = False,
                  Provided_pool = None, # Pool object for multiprocessing
-                 Seed = None,
                  Nperiodiccheckpoint = 10,
                  Output = './',
                  Resume = False,
@@ -48,10 +46,10 @@ class Swarm(object):
                  Reinitialise_velocities_from_initial_guess=True,
                  Affine_invariant_a = 2.0):
         """
-        Minimum working example of Particle swarm optimization class.
+       Particle swarm optimization class.
 
 
-        REQUIRED INPUTS
+        Required parameters
         ------
 
         Model: object inheriting PySO.Model.Model
@@ -60,10 +58,8 @@ class Swarm(object):
             number of particles in the swarm
 
 
-        OPTIONAL INPUTS
+        Optional parameters
         ---------------
-
-        (Algorithm parameters)
         Omega: float
             the omega parameter, inertial coefficient for velocity updating [defaults to .6]
         Phip: float
@@ -72,9 +68,6 @@ class Swarm(object):
             the phi_g parameter, social coefficient for velocity updating [defaults to .2]
         Mh_fraction: float
             parameter controlling proportion of velocity rule dictated by MCMC [defaults to 0.]
-        Jitter_weight: float
-            parameter that controls the movement of velocities to point towards a random particle in the swarm [defaults to 0.]
-             (used to get particle out of local maxima they are stuck in)
         Tol: float
             the minimum improvement on functionvalue that we class as "still converging"
         Automatic_convergence_testing: boolean
@@ -101,8 +94,6 @@ class Swarm(object):
             Number of multiprocessing threads to use. If None, use a serial version.
         Provided_pool: Pool object [Defaults to None]
             Pool object for multiprocessing. If pool not provided, creates a new pool. If pool provided, uses that pool.
-        Seed: int
-            random Seed [defaults to None]
         Nperiodiccheckpoint: int
             number of iterations between checkpoints [defaults to 10]
         Output: str
@@ -168,8 +159,6 @@ class Swarm(object):
         self.PhiP = Phip
         self.PhiG = Phig
         self.MH_fraction = Mh_fraction
-        self.Jitter_weight  = Jitter_weight
-
 
         if Proposalcov is None:
             self.ProposalCov = np.identity(self.Ndim)
@@ -183,8 +172,6 @@ class Swarm(object):
         
         # Initial placement method
         self.Initial_placement = Initial_placement
-
-        self.Seed = Seed
 
         self.nPeriodicCheckpoint = Nperiodiccheckpoint
 
@@ -329,11 +316,7 @@ class Swarm(object):
 
         else:
 
-            # Initialise counter and random seed
             self.EvolutionCounter = 0
-            if self.Seed is not None:
-                np.random.seed(seed=self.Seed)
-
             # Initialise the particle positions/velocities 
 
             if self.Initial_placement == 'Random':
@@ -438,8 +421,7 @@ class Swarm(object):
 
     def PSO_VelocityRule(self):
         """
-        The standard PSO rule for updating the velocities with a jitter component added to reduce the chance of a particle
-        stuck in a local maxima
+        The standard PSO rule for updating the velocities 
 
         RETURN:
         ------
@@ -450,13 +432,14 @@ class Swarm(object):
         best_known_swarm_point = np.tile(
                               self.BestKnownSwarmPoint, self.NumParticles
                                   ).reshape((self.NumParticles, self.Ndim))
+        
+
         unclipped_velocities = (self.Omega * self.Velocities 
                + self.PhiP * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( self.BestKnownPoints - self.Points )
-               + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points)
-               # line "jitters" each particle towards another random particle in the swarm to prevent being stuck in local maxima
-               + self.Jitter_weight * np.random.uniform(size=(self.NumParticles,self.Ndim)) * (self.Points[np.random.randint(self.NumParticles,size=self.NumParticles)]-
-                                                                                               self.Points))
+               + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points ))
+        
         clipped_velocities = self.velocity_clipping_function(unclipped_velocities)
+        
         return (clipped_velocities)
 
     def velocity_clipping(self,unclipped_velocities):
