@@ -450,7 +450,7 @@ class Swarm(object):
         best_known_swarm_point = np.tile(
                               self.BestKnownSwarmPoint, self.NumParticles
                                   ).reshape((self.NumParticles, self.Ndim))
-        unclipped_velocities = self.Constriction_factor*(self.Omega * self.Velocities
+        unclipped_velocities = (self.Omega * self.Velocities 
                + self.PhiP * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( self.BestKnownPoints - self.Points )
                + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points)
                # line "jitters" each particle towards another random particle in the swarm to prevent being stuck in local maxima
@@ -827,7 +827,16 @@ class Swarm(object):
 
         # Checks if a file already exists in the outdir file path
         history_file_path = os.path.join(self.Output, "SwarmEvolutionHistory.dat")
-        assert not os.path.isfile(history_file_path), "Swarm evolution file already exists"
+    
+        # Check if directory exits, if not create it
+        outdir = os.path.dirname(history_file_path)
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        # Check if file already exists, if so overwrite.
+        if os.path.isfile(history_file_path):
+            print('Swarm evolution file {} already exists, Overwriting'.format(history_file_path))
+            os.system('rm {}'.format(history_file_path))
 
         # header string
         # "# particle_number, name1, name2, name3, ..., function_value\n"

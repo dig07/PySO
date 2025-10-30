@@ -8,3 +8,4 @@ examples/MWE_swarm/*
 **/__pycache__*
 dist/
 .idea
+*.egg-info/*
