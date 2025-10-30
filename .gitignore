@@ -9,3 +9,4 @@ examples/MWE_swarm/*
 dist/
 .idea
 *.egg-info/*
+/examples/*/
