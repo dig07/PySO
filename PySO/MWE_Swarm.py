@@ -299,10 +299,28 @@ class Swarm(object):
             # If batched function just supply direct array
             par_dict = dict(zip(self.Model.names, p.T))
         objective_function_values = self.Model.objective_function(par_dict)
- 
         return objective_function_values
 
 
+    def MyFunc_batched(self,p):
+        """
+        The function to be maximised. Assumes a batched objective function.
+        Converts array into dictionary and calls self.Model.log_posterior
+
+        INPUTS
+        ------
+        p: array
+            Array of parameters. Order matches that in self.Model.names
+
+        RETURNS
+        -------
+        log_posterior: array of floats
+        """
+        # If batched function just supply direct array
+        par_dict = dict(zip(self.Model.names, p.T))
+        objective_function_values = self.Model.objective_function(par_dict)
+        return objective_function_values
+    
     def InitialiseSwarm(self):
         """
         Initialise the swarm points, values and velocities
@@ -708,6 +726,43 @@ class Swarm(object):
             self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)].copy()
             self.BestKnownSwarmValue = np.max(self.Values).copy()
 
+
+        # Append spreads
+        self.Spreads.append(np.ptp(self.Values))
+        # Append best Swarm value to history of best swarm values
+        self.FuncHistory.append(self.BestKnownSwarmValue)
+
+    def EvolveSwarm_Hierarchical_batched_return_positions(self):
+        """
+        Evolve swarm through a single iteration
+        """
+        self.EvolutionCounter += 1
+
+        # Update particle velocities
+        self.Velocities = self.VelocityRule()
+
+        # Update particle positions
+        self.Points += self.Velocities
+
+        # Enforce point to be within bounds
+        self.EnforceBoundaries()
+
+        return(self.Points)
+    
+    def EvolveSwarm_Hierarchical_batched_assign_values(self, function_values):
+
+        self.Values = function_values
+
+        # Update particle's best known position
+        new_best_known_values = np.maximum(self.BestKnownValues, self.Values)
+        self.BestKnownPoints = np.where(np.tile(new_best_known_values==self.BestKnownValues,self.Ndim).reshape((self.Ndim,self.NumParticles)).T,
+                                           self.BestKnownPoints, self.Points)
+        self.BestKnownValues = new_best_known_values
+
+        # Update swarm's best known position
+        if np.max(self.Values) > self.BestKnownSwarmValue:
+            self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)].copy()
+            self.BestKnownSwarmValue = np.max(self.Values).copy()
 
         # Append spreads
         self.Spreads.append(np.ptp(self.Values))

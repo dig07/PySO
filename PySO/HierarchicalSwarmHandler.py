@@ -51,8 +51,7 @@ class HierarchicalSwarmHandler(object):
                  Tol = 1.0e-2,
                  Convergence_testing_num_iterations = 50,
                  Nthreads = None,
-                 Constriction_ladder = None,
-                 Constriction_kappa_ladder = None):
+                 batched=False):
         """
 
         REQUIRED INPUTS
@@ -132,11 +131,6 @@ class HierarchicalSwarmHandler(object):
             Number of threads to use for parallel processing [defaults to None]
             Note: One global processor pool is used for all the swarms. This is to avoid the overhead of creating and destroying pools for each swarm.
             If None, defaults to a serial version.
-        Constriction_ladder: None or list
-            Constriction factor for each hierarchical model, defaults to None. If none set to False for each segment. 
-        Constriction_kappa_ladder: None or list
-            Constriction kappa factor for each hierarchical model, defaults to None. If none set to 1.0 for each segment. 
-                Only used if Constriction_factor for that given swarm is true. 
         """
         assert len(Hierarchical_models)>1, "Please input multiple models for Hierarchical PSO search"
 
@@ -227,15 +221,6 @@ class HierarchicalSwarmHandler(object):
         # Veto function to be used for vetoing swarms, generally should accept the swarms best parameters and return a boolean.
         self.Veto_function = Veto_function
         
-        # Constriction ladder
-        if Constriction_ladder != None:
-            self.Constriction_ladder = Constriction_ladder
-            self.Constriction_kappa_ladder = Constriction_kappa_ladder
-        else:
-            self.Constriction_ladder = [False]*len(self.Hierarchical_models)
-            self.Constriction_kappa_ladder = [1.0]*len(self.Hierarchical_models)
-
-
 
         # Minimum velocities ladder
         if np.all(Minimum_velocities) != None:
@@ -256,7 +241,8 @@ class HierarchicalSwarmHandler(object):
         # Number of threads to use for parallel processing (In one global processor pool for all the swarms)
         self.Nthreads = Nthreads
 
-
+        self.batched = batched
+    
         #Make new pool for parallel computations
             # This pool will be used throughout the entire run
 
@@ -306,15 +292,13 @@ class HierarchicalSwarmHandler(object):
         if self.parallel == False:
             self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                             Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
-                                                            Velocity_min=self.Minimum_velocities[0],Nthreads=None,Constriction=self.Constriction_ladder[0],
-                                                            Constriction_kappa=self.Constriction_kappa_ladder[0],**self.Swarm_kwargs)
+                                                            Velocity_min=self.Minimum_velocities[0],Nthreads=None,**self.Swarm_kwargs)
                         for swarm_index in self.Swarm_names}
 
         else:
             self.Swarms = {self.Swarm_names[swarm_index]: Swarm(self.Hierarchical_models[0], self.NumParticlesPerSwarm,
                                                                 Omega=self.Omegas[0], Phig= self.PhiGs[0], Phip=self.PhiPs[0], Mh_fraction=self.MH_fractions[0],
-                                                                Velocity_min=self.Minimum_velocities[0],Provided_pool=self.Global_Pool,Constriction=self.Constriction_ladder[0],
-                                                                Constriction_kappa=self.Constriction_kappa_ladder[0],**self.Swarm_kwargs)
+                                                                Velocity_min=self.Minimum_velocities[0],Provided_pool=self.Global_Pool,**self.Swarm_kwargs)
                         for swarm_index in self.Swarm_names}
 
         initial_best_positions = []
@@ -332,20 +316,53 @@ class HierarchicalSwarmHandler(object):
         self.EvolutionCounter = 0
 
         print('Swarm initialisation finished....')
+
     def EvolveSwarms(self):
         """
         Evolve every swarm through a single iteration
         """
         self.EvolutionCounter += 1
 
-        # TODO: Could probably speed this up by assigning different pools of CPUs to different Swarms
-        for name in list(self.Swarms.keys()):
-            self.Swarms[name].EvolveSwarm()
+        # BATCHED
+        if self.batched and self.NumSwarms>1:
+            # Extract all positions if using batched function evaluations
+            batched_locations = []
 
-            if np.max(self.Swarms[name].BestKnownSwarmValue) > self.BestKnownEnsembleValue:
-                self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
-                self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
-                self.BestCurrentSwarm = name
+            # Number of particles in each swarm. 
+            num_particles = []
+            for name in list(self.Swarms.keys()):
+                batched_locations.extend(self.Swarms[name].EvolveSwarm_Hierarchical_batched_return_positions())
+                num_particles.append(self.Swarms[name].NumParticles)
+
+            
+            # Batch compute all function values
+            all_function_values = np.array(self.Swarms[name].MyFunc_batched(np.array(batched_locations)))
+            # Cumulative sum to get indices for each swarm
+            indices_for_swarms = np.cumsum(num_particles)   
+
+            # Assign function values back to each swarm and evolve rest of it 
+            for i, name in enumerate(self.Swarms.keys()):
+                if i == 0:
+                    swarm_function_values = all_function_values[:indices_for_swarms[i]]
+                else:
+                    swarm_function_values = all_function_values[indices_for_swarms[i-1]:indices_for_swarms[i]]
+
+                self.Swarms[name].EvolveSwarm_Hierarchical_batched_assign_values(swarm_function_values)
+
+                if np.max(self.Swarms[name].BestKnownSwarmValue) > self.BestKnownEnsembleValue:
+                    self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
+                    self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
+                    self.BestCurrentSwarm = name
+
+        # NON BATCHED
+        else: 
+            for name in list(self.Swarms.keys()):
+                self.Swarms[name].EvolveSwarm()
+
+                if np.max(self.Swarms[name].BestKnownSwarmValue) > self.BestKnownEnsembleValue:
+                    self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
+                    self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
+                    self.BestCurrentSwarm = name
 
     def veto_and_redistribute(self):
         """
@@ -546,12 +563,10 @@ class HierarchicalSwarmHandler(object):
         if self.parallel == True: 
             newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
                             Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,Provided_pool=self.Global_Pool,
-                            Constriction=self.Constriction_ladder[self.Hierarchical_model_counter + 1],Constriction_kappa=self.Constriction_kappa_ladder[self.Hierarchical_model_counter + 1],
                             **self.Swarm_kwargs)
         else:
             newswarm = Swarm(self.Hierarchical_models[self.Hierarchical_model_counter + 1],num_particles,
                 Omega=Omega, Phip=PhiP, Phig=PhiG, Mh_fraction=MH_fraction ,Velocity_min=Velocity_min,Nthreads=None,
-                Constriction=self.Constriction_ladder[self.Hierarchical_model_counter + 1],Constriction_kappa=self.Constriction_kappa_ladder[self.Hierarchical_model_counter + 1],
                 **self.Swarm_kwargs)
 
         newswarm.EvolutionCounter = 0
@@ -599,7 +614,7 @@ class HierarchicalSwarmHandler(object):
 
             for i in range(newswarm.NumParticles):
                 # TODO: This be paralellized
-                newswarm.BestKnownValues[i] = newswarm.Model.log_likelihood(
+                newswarm.BestKnownValues[i] = newswarm.Model.objective_function(
                     dict(zip(newswarm.Model.names, newswarm.Points[i])))
         # Batched computation 
         elif self.Swarm_kwargs.get('batch_optimal_func') is True:
