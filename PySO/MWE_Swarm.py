@@ -305,13 +305,12 @@ class Swarm(object):
     def MyFunc_batched(self,p):
         """
         The function to be maximised. Assumes a batched objective function.
-        Converts array into dictionary and calls self.Model.log_posterior
-
+        Converts array into dictionary and calls self.Model.objective_function
+        
         INPUTS
         ------
         p: array
             Array of parameters. Order matches that in self.Model.names
-
         RETURNS
         -------
         log_posterior: array of floats
