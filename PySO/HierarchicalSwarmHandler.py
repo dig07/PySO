@@ -409,7 +409,14 @@ class HierarchicalSwarmHandler(object):
 
     def Reallocate_particles(self):
         """Use all particles in current swarms, cluster them based on features and reallocate"""
+        import time
+        
+        # Initialize timing dictionary
+        timings = {}
+        t_start = time.time()
 
+        # Veto and redistribute step
+        t0 = time.time()
         # Dont want to converge to or explore peaks that are below a certain threshold compared to the best of the entire ensemble
         # But dont want this redistribution to take place on the first "exploratory" swarm
         # Also dont want to redistribute if we are mostly doing MH MCMC velocity rule, as we dont expect strong clustering there
@@ -418,7 +425,10 @@ class HierarchicalSwarmHandler(object):
             num_particles_redistributed = self.veto_and_redistribute()
         else:
             num_particles_redistributed = 0
+        timings['veto_and_redistribute'] = time.time() - t0
     
+        # Array pre-allocation step
+        t0 = time.time()
         # Pre-allocate arrays to avoid repeated concatenation
         swarm_keys = list(self.frozen_swarms.keys())
         n_swarms = len(swarm_keys)
@@ -431,7 +441,10 @@ class HierarchicalSwarmHandler(object):
         total_particle_velocities = np.empty((total_particles, self.Ndim))
         clustering_features_array = np.empty((total_particles, len(self.clustering_indices) + 
                                             (1 if self.use_func_vals_in_clustering else 0)))
+        timings['array_allocation'] = time.time() - t0
         
+        # Feature extraction step
+        t0 = time.time()
         # Fill arrays in one pass
         idx = 0
         for swarm_key in swarm_keys:
@@ -449,20 +462,28 @@ class HierarchicalSwarmHandler(object):
                 clustering_features_array[idx:idx+n_particles, -1] = swarm.Values
             
             idx += n_particles
+        timings['feature_extraction'] = time.time() - t0
+        
+        # Clustering step
+        t0 = time.time()
         # min membership is the minimum number of particles per swarm and max clusters is the maximum number of clusters
         K, memberships = Clustering(clustering_features_array,min_membership=self.clustering_min_membership,max_clusters=self.clustering_max_clusters)
+        timings['clustering'] = time.time() - t0
 
-
+        # Legacy vstack operations (keeping for compatibility)
+        t0 = time.time()
         total_particle_positions = np.vstack([self.frozen_swarms[swarm_index].Points for swarm_index
                                in self.frozen_swarms.keys()])
         total_particle_velocities = np.vstack([self.frozen_swarms[swarm_index].Velocities for swarm_index
                                in self.frozen_swarms.keys()])
+        timings['legacy_vstack'] = time.time() - t0
 
         print('Reinitiating swarms with Omega: ',self.Omegas[self.Hierarchical_model_counter+1],
               ' PhiP: ',self.PhiPs[self.Hierarchical_model_counter+1],
               ' PhiG: ',self.PhiGs[self.Hierarchical_model_counter+1])
 
-
+        # Swarm creation step
+        t0 = time.time()
         # Create swarms efficiently
         new_swarms = {}
         for swarm_index in range(K):
@@ -475,9 +496,11 @@ class HierarchicalSwarmHandler(object):
                 new_swarms[swarm_index].Pool = self.Global_Pool
         
         self.Swarms = new_swarms
+        timings['swarm_creation'] = time.time() - t0
 
+        # Redistribution step
+        t0 = time.time()
         # Check to make sure that we arent on the first segment and there are actually particles to be redistributed (from veto)
-
         if self.Hierarchical_model_counter != 0 and num_particles_redistributed>0:
             # Redistribute particles into the best swarm we currently are tracking
             #       Do this by placed our "redistributed swarm" on top of the best swarm
@@ -503,14 +526,44 @@ class HierarchicalSwarmHandler(object):
             # Force all swarms to use the same global pool
             if self.parallel == True:
                 self.Swarms[swarm_index].Pool = self.Global_Pool 
+        timings['redistribution'] = time.time() - t0
             
-
-            
+        # Cleanup step
+        t0 = time.time()
         # Empty the frozen swarms dict as we are done with the old swarms
         self.frozen_swarms = {}
         self.AllStalled = False
 
         self.Hierarchical_model_counter += 1
+        timings['cleanup'] = time.time() - t0
+        
+        # Total time
+        timings['total'] = time.time() - t_start
+        
+        # Print comprehensive benchmark results
+        print("\n" + "="*70)
+        print("REALLOCATION PERFORMANCE BENCHMARK")
+        print("="*70)
+        print(f"Total particles processed: {total_particles}")
+        print(f"Number of clusters found: {K}")
+        print(f"Particles redistributed: {num_particles_redistributed}")
+        print("-"*70)
+        
+        for step, duration in timings.items():
+            if step != 'total':
+                percentage = (duration / timings['total']) * 100
+                print(f"{step:.<30s} {duration:>8.4f}s ({percentage:>5.1f}%)")
+        
+        print("-"*70)
+        print(f"{'TOTAL TIME':.<30s} {timings['total']:>8.4f}s (100.0%)")
+        print("="*70 + "\n")
+        
+        # Optional: Add warning if clustering is taking too long
+        if timings['clustering'] > 5.0:
+            print(f"⚠️  WARNING: Clustering took {timings['clustering']:.2f}s - consider reducing max_clusters or using larger min_membership")
+        
+        if timings['swarm_creation'] > timings['clustering']:
+            print(f"⚠️  NOTE: Swarm creation ({timings['swarm_creation']:.2f}s) is slower than clustering - consider batching objective function evaluations")
 
     def Reinitiate_swarm(self,positions,velocities,
                          Omega=None,
