@@ -271,6 +271,27 @@ class HierarchicalSwarmHandler(object):
         self.Tol = Tol
         self.Convergence_testing_num_iterations = Convergence_testing_num_iterations
 
+        # Initialize benchmarking dictionaries
+        self.evolution_timings = {
+            'position_extraction': 0.0,
+            'batch_function_eval': 0.0,
+            'value_assignment': 0.0,
+            'best_tracking': 0.0,
+            'serial_evolution': 0.0,
+            'total': 0.0
+        }
+        self.evolution_call_count = 0
+        
+        # Hierarchical step benchmarking
+        self.hierarchical_step_timings = {
+            'stall_checking': 0.0,
+            'swarm_freezing': 0.0,
+            'reallocation': 0.0,
+            'total': 0.0
+        }
+        self.hierarchical_step_call_count = 0
+        self.reallocation_count = 0
+
         if self.Resume and os.path.exists(resume_file):
             print('Resuming from file {}'.format(resume_file))
             self.ResumeFromCheckpoint()
@@ -313,11 +334,16 @@ class HierarchicalSwarmHandler(object):
         """
         Evolve every swarm through a single iteration
         """
+        import time
+        t_iter_start = time.time()
+        
         self.EvolutionCounter += 1
+        self.evolution_call_count += 1
 
         # BATCHED
         if self.batched and self.NumSwarms>1:
             # Extract all positions if using batched function evaluations
+            t0 = time.time()
             batched_locations = []
 
             # Number of particles in each swarm. 
@@ -325,14 +351,17 @@ class HierarchicalSwarmHandler(object):
             for name in list(self.Swarms.keys()):
                 batched_locations.extend(self.Swarms[name].EvolveSwarm_Hierarchical_batched_return_positions())
                 num_particles.append(self.Swarms[name].NumParticles)
+            self.evolution_timings['position_extraction'] += time.time() - t0
 
-            
             # Batch compute all function values
+            t0 = time.time()
             all_function_values = np.array(self.Swarms[name].MyFunc_batched(np.array(batched_locations)))
             # Cumulative sum to get indices for each swarm
-            indices_for_swarms = np.cumsum(num_particles)   
+            indices_for_swarms = np.cumsum(num_particles)
+            self.evolution_timings['batch_function_eval'] += time.time() - t0
 
-            # Assign function values back to each swarm and evolve rest of it 
+            # Assign function values back to each swarm and evolve rest of it
+            t0 = time.time()
             for i, name in enumerate(self.Swarms.keys()):
                 if i == 0:
                     swarm_function_values = all_function_values[:indices_for_swarms[i]]
@@ -340,14 +369,20 @@ class HierarchicalSwarmHandler(object):
                     swarm_function_values = all_function_values[indices_for_swarms[i-1]:indices_for_swarms[i]]
 
                 self.Swarms[name].EvolveSwarm_Hierarchical_batched_assign_values(swarm_function_values)
+            self.evolution_timings['value_assignment'] += time.time() - t0
 
+            # Track best values
+            t0 = time.time()
+            for name in self.Swarms.keys():
                 if np.max(self.Swarms[name].BestKnownSwarmValue) > self.BestKnownEnsembleValue:
                     self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
                     self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
                     self.BestCurrentSwarm = name
+            self.evolution_timings['best_tracking'] += time.time() - t0
 
         # NON BATCHED
-        else: 
+        else:
+            t0 = time.time()
             for name in list(self.Swarms.keys()):
                 self.Swarms[name].EvolveSwarm()
 
@@ -355,6 +390,9 @@ class HierarchicalSwarmHandler(object):
                     self.BestKnownEnsembleValue = np.max(self.Swarms[name].BestKnownSwarmValue)
                     self.BestKnownEnsemblePoint = self.Swarms[name].Points[np.argmax(self.Swarms[name].Values)]
                     self.BestCurrentSwarm = name
+            self.evolution_timings['serial_evolution'] += time.time() - t0
+        
+        self.evolution_timings['total'] += time.time() - t_iter_start
 
     def veto_and_redistribute(self):
         """
@@ -708,6 +746,127 @@ class HierarchicalSwarmHandler(object):
             output_str += "with spread {0}".format(self.Swarms[swarm_name].Spreads[-1])
         print(output_str)
 
+    def PrintEvolutionBenchmarks(self):
+        """
+        Print comprehensive benchmarking results for EvolveSwarms and check_hierarchical_step functions
+        """
+        if self.evolution_call_count == 0:
+            print("No evolution timing data available.")
+            return
+        
+        print("\n" + "="*80)
+        print("EVOLVE SWARMS PERFORMANCE BENCHMARK")
+        print("="*80)
+        print(f"Total evolution iterations: {self.evolution_call_count}")
+        print(f"Mode: {'BATCHED' if (self.batched and self.NumSwarms > 1) else 'SERIAL'}")
+        print("-"*80)
+        
+        # Calculate per-iteration averages
+        print(f"{'Component':<35s} {'Total (s)':>12s} {'Per-Iter (ms)':>15s} {'% of Total':>12s}")
+        print("-"*80)
+        
+        for component, total_time in self.evolution_timings.items():
+            if component == 'total':
+                continue
+            
+            # Skip components with zero time (not used in current mode)
+            if total_time < 0.0001:
+                continue
+                
+            per_iter_ms = (total_time / self.evolution_call_count) * 1000
+            percentage = (total_time / self.evolution_timings['total']) * 100 if self.evolution_timings['total'] > 0 else 0
+            
+            component_name = component.replace('_', ' ').title()
+            print(f"{component_name:<35s} {total_time:>12.4f} {per_iter_ms:>15.2f} {percentage:>11.1f}%")
+        
+        print("-"*80)
+        total_time = self.evolution_timings['total']
+        avg_per_iter_ms = (total_time / self.evolution_call_count) * 1000
+        print(f"{'TOTAL':<35s} {total_time:>12.4f} {avg_per_iter_ms:>15.2f} {'100.0':>11s}%")
+        print("="*80)
+        
+        # Performance insights
+        if self.batched and self.NumSwarms > 1:
+            batch_time = self.evolution_timings['batch_function_eval']
+            batch_pct = (batch_time / total_time) * 100 if total_time > 0 else 0
+            print(f"\n💡 INSIGHTS:")
+            print(f"   • Batch function evaluation: {batch_pct:.1f}% of total time")
+            if batch_pct > 70:
+                print(f"   ⚠️  Function evaluation dominates - consider optimizing objective function")
+            
+            assignment_time = self.evolution_timings['value_assignment']
+            assignment_pct = (assignment_time / total_time) * 100 if total_time > 0 else 0
+            if assignment_pct > 20:
+                print(f"   ⚠️  Value assignment ({assignment_pct:.1f}%) seems high - potential overhead")
+        else:
+            serial_time = self.evolution_timings['serial_evolution']
+            print(f"\n💡 INSIGHTS:")
+            print(f"   • Running in SERIAL mode")
+            if self.NumSwarms > 1:
+                print(f"   💡 Consider enabling batched mode for {self.NumSwarms} swarms")
+        
+        iterations_per_sec = self.evolution_call_count / total_time if total_time > 0 else 0
+        print(f"   • Average throughput: {iterations_per_sec:.2f} iterations/second")
+        print("="*80 + "\n")
+        
+        # Print hierarchical step benchmarks
+        if self.hierarchical_step_call_count > 0:
+            print("\n" + "="*80)
+            print("HIERARCHICAL STEP PERFORMANCE BENCHMARK")
+            print("="*80)
+            print(f"Total check_hierarchical_step calls: {self.hierarchical_step_call_count}")
+            print(f"Number of reallocations: {self.reallocation_count}")
+            print("-"*80)
+            
+            print(f"{'Component':<35s} {'Total (s)':>12s} {'Per-Call (ms)':>15s} {'% of Total':>12s}")
+            print("-"*80)
+            
+            for component, total_time in self.hierarchical_step_timings.items():
+                if component == 'total':
+                    continue
+                
+                # Skip components with zero time
+                if total_time < 0.0001:
+                    continue
+                    
+                per_call_ms = (total_time / self.hierarchical_step_call_count) * 1000
+                percentage = (total_time / self.hierarchical_step_timings['total']) * 100 if self.hierarchical_step_timings['total'] > 0 else 0
+                
+                component_name = component.replace('_', ' ').title()
+                print(f"{component_name:<35s} {total_time:>12.4f} {per_call_ms:>15.2f} {percentage:>11.1f}%")
+            
+            print("-"*80)
+            hier_total_time = self.hierarchical_step_timings['total']
+            avg_per_call_ms = (hier_total_time / self.hierarchical_step_call_count) * 1000
+            print(f"{'TOTAL':<35s} {hier_total_time:>12.4f} {avg_per_call_ms:>15.2f} {'100.0':>11s}%")
+            print("="*80)
+            
+            # Hierarchical step insights
+            if hier_total_time > 0:
+                realloc_time = self.hierarchical_step_timings['reallocation']
+                realloc_pct = (realloc_time / hier_total_time) * 100
+                
+                print(f"\n💡 INSIGHTS:")
+                if self.reallocation_count > 0:
+                    avg_realloc_time = realloc_time / self.reallocation_count
+                    print(f"   • Average reallocation time: {avg_realloc_time:.3f}s")
+                    print(f"   • Reallocation overhead: {realloc_pct:.1f}% of hierarchical step time")
+                    
+                    if realloc_pct > 80:
+                        print(f"   ⚠️  Reallocation dominates hierarchical step - see reallocation benchmark above")
+                
+                stall_check_time = self.hierarchical_step_timings['stall_checking']
+                stall_check_pct = (stall_check_time / hier_total_time) * 100
+                if stall_check_pct > 10:
+                    print(f"   • Stall checking: {stall_check_pct:.1f}% - relatively high overhead")
+                
+                # Overall time breakdown
+                total_evolution_time = self.evolution_timings['total']
+                total_hier_pct = (hier_total_time / total_evolution_time) * 100 if total_evolution_time > 0 else 0
+                print(f"   • Hierarchical step overhead: {total_hier_pct:.1f}% of total evolution time")
+                
+            print("="*80 + "\n")
+
 
     def CreateEvolutionHistoryFile(self):
         """
@@ -798,10 +957,16 @@ class HierarchicalSwarmHandler(object):
         Returns:
             None
         """
+        import time
+        t_start = time.time()
+        self.hierarchical_step_call_count += 1
 
         # If all swarms are not stalled yet
         if self.AllStalled == False:
-
+            
+            t0 = time.time()
+            swarms_to_freeze = []
+            
             for swarm_index, Swarm_ in zip(list(self.Swarms.keys()),list(self.Swarms.values())):
 
                 # If the mean of the spreads computed across the last 10 iterations has not gotten lower,
@@ -810,17 +975,25 @@ class HierarchicalSwarmHandler(object):
                 if Swarm_.EvolutionCounter > self.Minimum_exploration_iterations and self.EvolutionCounter > self.Initial_exploration_limit:
 
                     if self.stall_condition(Swarm_):
-
-                        print('\n Swarm ',str(swarm_index),' reached stall condition, freezing')
-
-                        # Freeze until all swarms have been stalled in this given segment likelihood
-
-                        self.frozen_swarms[swarm_index] = Swarm_
-
-                        self.Swarms.pop(swarm_index)
-
-                        # If all the swarms have stalled:
-                        if len(list(self.Swarms.values())) == 0: self.AllStalled = True
+                        swarms_to_freeze.append((swarm_index, Swarm_))
+            
+            self.hierarchical_step_timings['stall_checking'] += time.time() - t0
+            
+            # Freeze swarms that have stalled
+            if swarms_to_freeze:
+                t0 = time.time()
+                for swarm_index, Swarm_ in swarms_to_freeze:
+                    print('\n Swarm ',str(swarm_index),' reached stall condition, freezing')
+                    
+                    # Freeze until all swarms have been stalled in this given segment likelihood
+                    self.frozen_swarms[swarm_index] = Swarm_
+                    self.Swarms.pop(swarm_index)
+                
+                # If all the swarms have stalled:
+                if len(list(self.Swarms.values())) == 0: 
+                    self.AllStalled = True
+                
+                self.hierarchical_step_timings['swarm_freezing'] += time.time() - t0
 
             if self.AllStalled:
 
@@ -838,7 +1011,13 @@ class HierarchicalSwarmHandler(object):
                 else:
                     print('\n All swarms stalled! Switching segments from ', str(self.Hierarchical_models[self.Hierarchical_model_counter].segment_number),
                           ' to ', str(self.Hierarchical_models[self.Hierarchical_model_counter+1].segment_number))
+                    
+                    t0 = time.time()
                     self.Reallocate_particles()
+                    self.hierarchical_step_timings['reallocation'] += time.time() - t0
+                    self.reallocation_count += 1
+        
+        self.hierarchical_step_timings['total'] += time.time() - t_start
 
 
     def stall_condition(self,Swarm):
@@ -883,3 +1062,7 @@ class HierarchicalSwarmHandler(object):
             self.check_hierarchical_step()
 
         self.SaveFinalResults()
+        
+        # Print evolution benchmarks at the end
+        if self.Verbose or self.evolution_call_count > 0:
+            self.PrintEvolutionBenchmarks()
