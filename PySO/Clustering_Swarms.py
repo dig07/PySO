@@ -10,7 +10,7 @@ from scipy.signal import argrelextrema
 from scipy.interpolate import interp1d
 
 from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
+from sklearn.cluster import KMeans, MiniBatchKMeans
 
 
 def Standardize(X):
@@ -33,7 +33,7 @@ def Standardize(X):
     return scaler.transform(X, copy=True)
 
 
-def KMeans_clustering(X_std, K):
+def KMeans_clustering(X_std, K, use_minibatch=False, batch_size=1024):
     """
     Apply the KMeans clustering algorithm
 
@@ -44,6 +44,10 @@ def KMeans_clustering(X_std, K):
         standardised to zero-mean and unit-variance form
     K: int
         the number of clusters to use
+    use_minibatch: bool
+        whether to use MiniBatchKMeans for faster clustering on large datasets
+    batch_size: int
+        batch size for MiniBatchKMeans (ignored if use_minibatch=False)
 
     RETURNS
     -------
@@ -54,7 +58,11 @@ def KMeans_clustering(X_std, K):
         for each particle, return an int in the range 0, K-1
         identifying the cluster to which it belongs
     """
-    kmeans = KMeans(n_clusters=K,n_init='auto')
+    if use_minibatch:
+        kmeans = MiniBatchKMeans(n_clusters=K, n_init=3, batch_size=batch_size, random_state=42)
+    else:
+        kmeans = KMeans(n_clusters=K, n_init='auto', random_state=42)
+    
     kmeans.fit(X_std)
 
     I = kmeans.inertia_
@@ -95,12 +103,26 @@ def NumberOfClusters(X_std,
     K: int
         the number of clusters to use
     """
-    # apply KMeans clustering for trial number of clusters in
-    # the range (min_clusters, max_clusters) and record inertia
-    nclusters = np.arange(min_clusters, max_clusters+1)
-    distorsions = np.zeros_like(nclusters)
+    # Optimize: test fewer K values using log-scale sampling for large ranges
+    # Use MiniBatchKMeans for datasets with > 10000 points
+    k_range = max_clusters - min_clusters + 1
+    max_k_trials = 20  # Maximum number of K values to test
+    use_minibatch = (X_std.shape[0] > 10000)
+    
+    if k_range > max_k_trials:
+        # Sample K values on log scale for efficiency
+        nclusters = np.unique(np.logspace(
+            np.log10(min_clusters),
+            np.log10(max_clusters),
+            num=min(max_k_trials, k_range)
+        ).astype(int))
+    else:
+        nclusters = np.arange(min_clusters, max_clusters+1)
+    
+    # apply KMeans clustering for trial number of clusters and record inertia
+    distorsions = np.zeros(len(nclusters), dtype=float)
     for i, k in enumerate(nclusters):
-        I, _, _ = KMeans_clustering(X_std, k)
+        I, _, _ = KMeans_clustering(X_std, k, use_minibatch=use_minibatch)
         distorsions[i] = np.sqrt(I)
 
     # find the 'elbow' in the inertia curve
@@ -153,26 +175,28 @@ def RemoveSmallClusters(X_std, kmeans, min_membership):
     """
     unique, unique_counts = np.unique(kmeans.labels_, return_counts=True)
 
-    if not any(unique_counts<min_membership):
+    # Vectorized check for small clusters
+    small_clusters_mask = (unique_counts < min_membership)
+    
+    if not np.any(small_clusters_mask):
         # all the clusters are already of an appropriate size... do nothing
         return kmeans.n_clusters, kmeans.labels_
 
-    if all(unique_counts<min_membership):
+    if np.all(small_clusters_mask):
         # all of the clusters are too small... oh dear
         W = "Clustering failed:"
         W += " all clusters below min size = {}".format(min_membership)
         W += " (returning points with no clustering)"
         warning.warn(W)
-        return 1, np.ones_like(memberships)
+        return 1, np.zeros(len(kmeans.labels_), dtype=int)
 
     # keep only cluster above min size
-    small_clusters = (unique_counts<min_membership)
-    big_clusters = ~small_clusters
+    big_clusters = ~small_clusters_mask
     kmeans.cluster_centers_ = kmeans.cluster_centers_[big_clusters]
 
     W = "Removing {0} clusters with {1} particles ".format(
-                        np.sum(small_clusters),
-                        unique_counts[small_clusters])
+                        np.sum(small_clusters_mask),
+                        unique_counts[small_clusters_mask])
     warning.warn(W)
 
     K = np.sum(big_clusters)
@@ -228,18 +252,31 @@ def Clustering(X,
     """
     # check input has the correct shape
     assert X.ndim==2, "X.shape={} is not of form (n,p)".format(X.shape)
+    
+    n_samples = X.shape[0]
+    
+    # Early return for trivial cases
+    if min_membership and n_samples < min_membership * 2:
+        return 1, np.zeros(n_samples, dtype=int)
 
     # standardize the data to zero mean and unit variance
     X_std = Standardize(X)
+    
+    # Automatically use MiniBatchKMeans for large datasets (>10k points)
+    use_minibatch = (n_samples > 10000)
 
     if K is None:
+        # Limit max_clusters to reasonable value based on min_membership
+        if min_membership:
+            max_clusters = min(max_clusters, n_samples // min_membership)
+        
         # determine the number of clusters to use
         K = NumberOfClusters(X_std, min_clusters, max_clusters,
                              save_elbow_curve=save_elbow_curve,
                              elbow_tol=elbow_tol)
 
     # run KMeans clustering on the data
-    _, memberships, kmeans = KMeans_clustering(X_std, K)
+    _, memberships, kmeans = KMeans_clustering(X_std, K, use_minibatch=use_minibatch)
 
     # enforce minimum cluster membership size
     if min_membership:

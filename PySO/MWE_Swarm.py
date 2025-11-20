@@ -1,18 +1,13 @@
 import numpy as np
-import os
-import pickle
-import seaborn as sns
 import matplotlib.pyplot as plt
+import seaborn as sns
 from PySO.affine_invariant_utils import sample_g, ParallelStretchMove_InternalFunction
+import pickle
 import scipy 
+import os
 
-try:
-    print('Defaulting to torch.multiprocessing')
-    from torch.multiprocessing import Pool, set_start_method
-    set_start_method('spawn',force=True)
-except: 
-    print('PyTorch not installed, not using torch.multiprocessing, using pathos.multiprocessing instead')
-    from pathos.multiprocessing import ProcessingPool as Pool
+# Multiprocessing for parallel processes
+from pathos.multiprocessing import ProcessingPool as Pool
 
 class Swarm(object):
 
@@ -23,7 +18,6 @@ class Swarm(object):
                  Phip = 0.2,         # PSO rule parameter
                  Phig = 0.2,        # PSO rule parameter
                  Mh_fraction= 0.0,
-                 Jitter_weight = 0.0,
                  Tol = 1.0e-3,
                  Automatic_convergence_testing = False,
                  Convergence_testing_num_iterations = 50,
@@ -34,7 +28,6 @@ class Swarm(object):
                  Nthreads = None,
                  batch_optimal_func = False,
                  Provided_pool = None, # Pool object for multiprocessing
-                 Seed = None,
                  Nperiodiccheckpoint = 10,
                  Output = './',
                  Resume = False,
@@ -51,15 +44,12 @@ class Swarm(object):
                  Delta_min = 0.0001,
                  Velocity_clipping_or_rescale= 'Clip',
                  Reinitialise_velocities_from_initial_guess=True,
-                 Affine_invariant_a = 2.0,
-                 Constriction = False,
-                 Constriction_kappa = 1.0):
+                 Affine_invariant_a = 2.0):
         """
+       Particle swarm optimization class.
 
-        Minimum working example of Particle swarm optimization class.
 
-
-        REQUIRED INPUTS
+        Required parameters
         ------
 
         Model: object inheriting PySO.Model.Model
@@ -68,10 +58,8 @@ class Swarm(object):
             number of particles in the swarm
 
 
-        OPTIONAL INPUTS
+        Optional parameters
         ---------------
-
-        (Algorithm parameters)
         Omega: float
             the omega parameter, inertial coefficient for velocity updating [defaults to .6]
         Phip: float
@@ -80,9 +68,6 @@ class Swarm(object):
             the phi_g parameter, social coefficient for velocity updating [defaults to .2]
         Mh_fraction: float
             parameter controlling proportion of velocity rule dictated by MCMC [defaults to 0.]
-        Jitter_weight: float
-            parameter that controls the movement of velocities to point towards a random particle in the swarm [defaults to 0.]
-             (used to get particle out of local maxima they are stuck in)
         Tol: float
             the minimum improvement on functionvalue that we class as "still converging"
         Automatic_convergence_testing: boolean
@@ -109,8 +94,6 @@ class Swarm(object):
             Number of multiprocessing threads to use. If None, use a serial version.
         Provided_pool: Pool object [Defaults to None]
             Pool object for multiprocessing. If pool not provided, creates a new pool. If pool provided, uses that pool.
-        Seed: int
-            random Seed [defaults to None]
         Nperiodiccheckpoint: int
             number of iterations between checkpoints [defaults to 10]
         Output: str
@@ -148,13 +131,6 @@ class Swarm(object):
         affine_invariant_a: float
             Parameter for the affine invariant MCMC velocity rule. Controls how large of a step the sampler takes, 
                 Acceptance rate goes down if a goes up [defaults to 2.0]
-        Constriction: Boolean
-            Flag to use constriction factor in PSO velocity rule [defaults to True]
-                Constriction factor derived in https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=985692.
-        Constriction_kappa: float
-            Constriction factor kappa [defaults to 1.0], Only used when Constriction is True, derived in https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=985692.
-                Controls degree of convergence of the swarm. 
-                Note PhiP=PhiG=2, Kappa=1 gives the same velocity rule as the standard PSO rule.
         """
         
         self.Ndim = len(Model.names)
@@ -183,8 +159,6 @@ class Swarm(object):
         self.PhiP = Phip
         self.PhiG = Phig
         self.MH_fraction = Mh_fraction
-        self.Jitter_weight  = Jitter_weight
-
 
         if Proposalcov is None:
             self.ProposalCov = np.identity(self.Ndim)
@@ -198,8 +172,6 @@ class Swarm(object):
         
         # Initial placement method
         self.Initial_placement = Initial_placement
-
-        self.Seed = Seed
 
         self.nPeriodicCheckpoint = Nperiodiccheckpoint
 
@@ -217,46 +189,57 @@ class Swarm(object):
         self.Nthreads = Nthreads
         self.batch_optimal_func = batch_optimal_func
 
-        # If Pool is not provided, create a new Pool
+        # If Pool is not provided, create a new Pool if Nthreads is not none and
+        # no batching is used
         if Provided_pool is None and self.Nthreads is not None and self.batch_optimal_func is False:
             self.parallel = True
             self.Pool = Pool(self.Nthreads)
+        # If pool is provided just use that
         if Provided_pool is not None:
             self.parallel = True
             self.Pool = Provided_pool
+        # If Pool is not provided and Nthreads is None and no batching is used
+        # just run in serial
         if self.Nthreads is None and Provided_pool is None and self.batch_optimal_func is False:
             self.parallel = False
-        # Batched is NOT parallel. 
+        # Batched, not this is NOT multiprocessing, its just batch computing and
+        # it relies on the objective function to handle the batching
         if self.batch_optimal_func is True:
             self.parallel = False
-
+    
+        # By default no parameter is periodic
         if Periodic is None:
             self.Periodic = np.array([ 0 for i in range(self.Ndim)])
         else:
             assert (  len(Periodic)==self.Ndim  and  all(np.isin(Periodic, [0,1]))  )
             self.Periodic = np.array(list(Periodic))
-
+        
+        # Periodic ranges for each parameters, set to inf if not periodic,
+        # x%np.inf=x for all x
         self.PeriodicParamRanges = np.array([
                                             np.inf if self.Periodic[i]==0 else np.ptp(b)
                                         for i, b in enumerate(self.Model.bounds)])
 
-    # Param indexes where periodicity happens
+        # Param indexes where periodicity happens
         self.Periodic_params = np.where(self.Periodic == 1)[0]
 
+        # Prior bounds
         self.BoundsArray = np.array(self.Model.bounds)
 
-        #     NOTE: ptp by default positive
-
-
+        # Clipping sets a minimum velocity for each dimension, i.e. manually
+        # preventing convergence to a local maxima by setting a minimum velocity
+        # for each dimension
         if Velocity_clipping_or_rescale == 'Clip':
             self.velocity_clipping_function = self.velocity_clipping
             self.velocity_minimum_factor = Velocity_minimum_factor
             self.velocity_min = Velocity_min
+            # If no minimum velocity provided, set to 1/100th of the range of each parameter
             if np.all(self.velocity_min == None):
                 self.velocity_min = np.ptp(self.BoundsArray, axis=1) / self.velocity_minimum_factor
     
+        # Do we ever really use this?
         elif Velocity_clipping_or_rescale == 'Rescale':
-
+            
             self.velocity_clipping_function = self.rescale_velocities
             self.delta_max = Delta_max
             self.delta_min = Delta_min
@@ -268,39 +251,34 @@ class Swarm(object):
         # Whether to reinitialise velocities from initial guess or from v_min array provided by user
         self.reinitialise_velocities_from_initial_guess = Reinitialise_velocities_from_initial_guess
 
-
+        # Controlling if Metropolis Hastings MCMC is used in the velocity rule
         if self.MH_fraction == 0:
             # The velocity rule is the PSO standard rule when no MH
             self.VelocityRule = self.PSO_VelocityRule
         elif self.MH_fraction == 1: 
             # The velocity rule is the Affine Invariant MC rule
             self.VelocityRule = self.ParallelAffineInvariantMC_VelocityRule_
+            # Only used for the affine invariant MCMC velocity rule
+            self.affine_invariant_a = Affine_invariant_a    
         else:
             # Some combinaton of the 2
             self.VelocityRule = self.Hybrid_VelocityRule
+            self.affine_invariant_a = Affine_invariant_a  
 
-
-        # Only used for hierarchical PSO searches
+        # Only used for hierarchical particle swarm, these are parameters used
+        # by he hierarchical swarm handler
         self.Hierarchical_step = 0
         self.Spreads = []
         self.FuncHistory = []
 
+        # If automatic convergence testing is turned on, check for convergence,
+        # if not just check for the iteration limit hitting max iterations
         if Automatic_convergence_testing == True:
             self.ContinueCondition = self.ContinueCondition_Hybrid
         else:
             self.ContinueCondition = self.ContinueCondition_Vanilla
-        self.log_posterior = None        
+    
 
-        # Only used for the affine invariant MCMC velocity rule
-        self.affine_invariant_a = Affine_invariant_a    
-
-        if Constriction == True:
-            Phi = self.PhiP + self.PhiG
-            if Phi < 4: 
-                assert False, "PhiP + PhiG must be greater than 4 for the constriction factor to work"
-            self.Constriction_factor = (2*Constriction_kappa)/np.abs(2-(Phi)-np.sqrt(Phi**2 -4*Phi))
-        else: 
-            self.Constriction_factor = 1
     def MyFunc(self,p):
         """
         The function to be maximised.
@@ -313,17 +291,35 @@ class Swarm(object):
 
         RETURNS
         -------
-        log_posterior: float
+        log_posterior: float or array of floats if batched
         """
         if self.batch_optimal_func == False:
             par_dict = dict(zip(self.Model.names, p))
         else:
-            # If batched function 
+            # If batched function just supply direct array
             par_dict = dict(zip(self.Model.names, p.T))
-        self.log_posterior = self.Model.log_likelihood(par_dict)
-        return self.log_posterior
+        objective_function_values = self.Model.objective_function(par_dict)
+        return objective_function_values
 
 
+    def MyFunc_batched(self,p):
+        """
+        The function to be maximised. Assumes a batched objective function.
+        Converts array into dictionary and calls self.Model.objective_function
+        
+        INPUTS
+        ------
+        p: array
+            Array of parameters. Order matches that in self.Model.names
+        RETURNS
+        -------
+        log_posterior: array of floats
+        """
+        # If batched function just supply direct array
+        par_dict = dict(zip(self.Model.names, p.T))
+        objective_function_values = self.Model.objective_function(par_dict)
+        return objective_function_values
+    
     def InitialiseSwarm(self):
         """
         Initialise the swarm points, values and velocities
@@ -337,11 +333,7 @@ class Swarm(object):
 
         else:
 
-            # Initialise counter and random seed
             self.EvolutionCounter = 0
-            if self.Seed is not None:
-                np.random.seed(seed=self.Seed)
-
             # Initialise the particle positions/velocities 
 
             if self.Initial_placement == 'Random':
@@ -446,8 +438,7 @@ class Swarm(object):
 
     def PSO_VelocityRule(self):
         """
-        The standard PSO rule for updating the velocities with a jitter component added to reduce the chance of a particle
-        stuck in a local maxima
+        The standard PSO rule for updating the velocities 
 
         RETURN:
         ------
@@ -458,13 +449,14 @@ class Swarm(object):
         best_known_swarm_point = np.tile(
                               self.BestKnownSwarmPoint, self.NumParticles
                                   ).reshape((self.NumParticles, self.Ndim))
-        unclipped_velocities = self.Constriction_factor*(self.Omega * self.Velocities
+        
+
+        unclipped_velocities = (self.Omega * self.Velocities 
                + self.PhiP * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( self.BestKnownPoints - self.Points )
-               + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points)
-               # line "jitters" each particle towards another random particle in the swarm to prevent being stuck in local maxima
-               + self.Jitter_weight * np.random.uniform(size=(self.NumParticles,self.Ndim)) * (self.Points[np.random.randint(self.NumParticles,size=self.NumParticles)]-
-                                                                                               self.Points))
+               + self.PhiG * np.random.uniform(size=(self.NumParticles,self.Ndim)) * ( best_known_swarm_point - self.Points ))
+        
         clipped_velocities = self.velocity_clipping_function(unclipped_velocities)
+        
         return (clipped_velocities)
 
     def velocity_clipping(self,unclipped_velocities):
@@ -739,6 +731,43 @@ class Swarm(object):
         # Append best Swarm value to history of best swarm values
         self.FuncHistory.append(self.BestKnownSwarmValue)
 
+    def EvolveSwarm_Hierarchical_batched_return_positions(self):
+        """
+        Evolve swarm through a single iteration
+        """
+        self.EvolutionCounter += 1
+
+        # Update particle velocities
+        self.Velocities = self.VelocityRule()
+
+        # Update particle positions
+        self.Points += self.Velocities
+
+        # Enforce point to be within bounds
+        self.EnforceBoundaries()
+
+        return(self.Points)
+    
+    def EvolveSwarm_Hierarchical_batched_assign_values(self, function_values):
+
+        self.Values = function_values
+
+        # Update particle's best known position
+        new_best_known_values = np.maximum(self.BestKnownValues, self.Values)
+        self.BestKnownPoints = np.where(np.tile(new_best_known_values==self.BestKnownValues,self.Ndim).reshape((self.Ndim,self.NumParticles)).T,
+                                           self.BestKnownPoints, self.Points)
+        self.BestKnownValues = new_best_known_values
+
+        # Update swarm's best known position
+        if np.max(self.Values) > self.BestKnownSwarmValue:
+            self.BestKnownSwarmPoint = self.Points[np.argmax(self.Values)].copy()
+            self.BestKnownSwarmValue = np.max(self.Values).copy()
+
+        # Append spreads
+        self.Spreads.append(np.ptp(self.Values))
+        # Append best Swarm value to history of best swarm values
+        self.FuncHistory.append(self.BestKnownSwarmValue)
+
     def Checkpoint(self):
         """
         Checkpoint swarm internal state
@@ -835,7 +864,16 @@ class Swarm(object):
 
         # Checks if a file already exists in the outdir file path
         history_file_path = os.path.join(self.Output, "SwarmEvolutionHistory.dat")
-        assert not os.path.isfile(history_file_path), "Swarm evolution file already exists"
+    
+        # Check if directory exits, if not create it
+        outdir = os.path.dirname(history_file_path)
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        # Check if file already exists, if so overwrite.
+        if os.path.isfile(history_file_path):
+            print('Swarm evolution file {} already exists, Overwriting'.format(history_file_path))
+            os.system('rm {}'.format(history_file_path))
 
         # header string
         # "# particle_number, name1, name2, name3, ..., function_value\n"
@@ -934,27 +972,4 @@ class Swarm(object):
         self.SaveFinalResults()
         if self.Plotevolution : self.PlotSwarmEvolution()
 
-    def __getstate__(self):
-        """
-        Get the state of the object. For mp+pool to work, the object must be picklable.
-
-        Returns:
-            dict: A dictionary containing the object's state.
-                - 'log_posterior': The log posterior value.
-                - 'Model': The model object.
-        """
-        return {'log_posterior': self.log_posterior,
-                'Model': self.Model}
-
-    def __setstate__(self, state):
-        """
-        Set the object's state from the state dictionary. For mp+pool to work, the object must be picklable.
-
-        Parameters:
-        state (dict): The state dictionary containing the object's state.
-
-        Returns:
-        None
-        """
-        self.log_posterior = state['log_posterior']
-        self.Model = state['Model']
+    

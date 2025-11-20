@@ -8,3 +8,6 @@ examples/MWE_swarm/*
 **/__pycache__*
 dist/
 .idea
+*.egg-info/*
+/examples/*/
+EnsembleParticleSwarmOptimization.egg-info/
