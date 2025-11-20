@@ -875,7 +875,15 @@ class HierarchicalSwarmHandler(object):
         """
         history_file_path = os.path.join(self.Output, "EnsembleEvolutionHistory.dat")
 
-        assert not os.path.isfile(history_file_path), "Ensemble evolution file already exists"
+        # Check if directory exits, if not create it
+        outdir = os.path.dirname(history_file_path)
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+
+        # Check if file already exists, if so overwrite.
+        if os.path.isfile(history_file_path):
+            print('Ensemble evolution file {} already exists, Overwriting'.format(history_file_path))
+            os.system('rm {}'.format(history_file_path))
 
         # header string
         # "swarm_number, particle_number, name1, name2, name3, ..., function_value\n"
